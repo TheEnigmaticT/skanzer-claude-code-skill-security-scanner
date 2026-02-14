@@ -12165,3 +12165,979 @@ Summarization failed for model openai/botty-step-flash: cannot schedule new futu
 Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
 summarizer unexpectedly failed for all models
 [20:04:18]   [7/10] Done (7334 bytes)
+[20:04:19]   [8/10] Building app/api/scan/directory/route.ts...
+[20:04:19]   [aider] Starting task...
+/Users/ct-mac-mini/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Warning: Input is not a terminal (fd=0).
+
+Warning for openai/botty-step-flash: Unknown context window size and costs, 
+using sane defaults.
+You can skip this check with --no-show-model-warnings
+
+https://aider.chat/docs/llms/warnings.html
+
+Creating empty file 
+/Users/ct-mac-mini/dev/skanzer-claude-code-skill-security-scanner-upload-/app/ap
+i/scan/directory/route.ts
+Aider v0.82.3
+Model: openai/botty-step-flash with whole edit format
+Git repo: .git with 34 files
+Repo-map: using 1024 tokens, auto refresh
+Added app/api/scan/directory/route.ts to the chat.
+Added lib/supabase/client.ts to the chat (read-only).
+Added lib/types.ts to the chat (read-only).
+Added app/nav.tsx to the chat (read-only).
+Added lib/supabase/server.ts to the chat (read-only).
+
+
+--------------
+► **THINKING**
+
+The user wants me to build the API route for `app/api/scan/directory/route.ts`. The file is currently empty (just triple backticks). I need to create a complete implementation.
+
+Let me understand the requirements:
+1. Process directory scanning for multiple skill files
+2. Use createClient from lib/supabase/server.ts
+3. Use types from lib/types.ts
+4. Handle appropriate HTTP methods (GET, POST, PUT, DELETE)
+5. Return NextResponse.json() with proper status codes
+6. Validate input data before processing
+7. Use the Supabase client to read/write the database
+
+The app is "Skanzer - Claude Code skill security scanner" that:
+- Uploads skill markdown files or scans skill directories
+- Detects: 1) Data exfiltration (HTTP calls, file writes outside workspace, env var access), 2) Behavior vs description mismatches (parse skill actions vs stated purpose), 3) Privilege escalation (sudo, dangerous bash commands)
+- Dashboard shows scan results with severity ratings, detailed findings, and safe/unsafe skill counts
+- Uses static analysis on markdown to find suspicious patterns
+
+I need to design an API that:
+- POST: Create a new scan for a directory (likely receives a list of skill IDs or file paths)
+- GET: Retrieve scan(s) - maybe list all directory scans or get a specific one
+- PUT: Update a scan (maybe to update status or add findings)
+- DELETE: Delete a scan
+
+But looking at the other API route mentioned (app/api/scan/file/route.ts), it seems like:
+- POST: upload a file and scan it
+- GET: returns method not allowed
+- PUT: returns method not allowed
+
+So for directory scanning, it's likely:
+- POST: initiate a scan of multiple skills (by IDs or directory path)
+- GET: retrieve scan results (maybe for a specific scan ID or list)
+- PUT/DELETE: maybe not needed, but could be for canceling or deleting scans
+
+Let me think about the data model from lib/types.ts:
+- Skill: has id, user_id, name, description, content, file_path, created_at, updated_at
+- Scan: has id, skill_id, status, started_at, completed_at, error_message
+- Finding: has id, scan_id, skill_id, category, severity, title, description, line_number, code_snippet, confidence, created_at
+- ScanWithDetails: extends Scan with skill and findings
+- DashboardStats: aggregates
+
+For directory scanning, we might scan multiple skills at once. So we need:
+- A way to create a scan that covers multiple skills. But the Scan table has a single skill_id. So maybe we create one Scan per skill, but they are grouped? Or we need a new table for "directory scans" that references multiple skills? The requirement says "Process directory scanning for multiple skill files". 
+
+Looking at the app/scan/directory/page.tsx summary, it mentions:
+- fetchSkills() to get all skills
+- toggleSkillSelection(skill.id) to select multiple skills
+- scans.map(scan => ...) showing scans for skills
+
+So it seems like the directory scanning page allows selecting multiple skills and then scanning them. The scans are individual per skill, but they are initiated together.
+
+So the POST endpoint for directory scanning should:
+- Accept a list of skill IDs (or maybe directory path, but from UI it seems like selecting skills)
+- For each skill ID, create a Scan record with status 'pending' or 'scanning'
+- Then process each skill's content (from Skill.content) to detect issues
+- Create Finding records for each issue
+- Update the Scan status to 'completed' (or 'failed' if error)
+
+But the processing might be async. The API could either:
+- Synchronously process all and return results (but could be slow for many skills)
+- Or create scans and return immediately, with a background job processing them
+
+Given it's a Next.js API route, we can do synchronous processing but with a timeout? Or we can use a queue. But for simplicity, I'll assume we process synchronously but maybe with a limit on number of skills.
+
+Alternatively, the POST could just create scan records and then trigger analysis in the same request, waiting for completion. That's simpler.
+
+Let's design:
+
+POST /api/scan/directory
+Body: { skillIds: string[] }  (array of skill IDs)
+- Validate: user must be authenticated, skillIds must be non-empty array, all skills must belong to the user
+- For each skillId:
+  - Get skill from DB
+  - Create Scan record with status 'scanning'
+  - Analyze skill content (using a function similar to analyzeSkillContent in file route)
+  - Create Finding records
+  - Update Scan to 'completed' with completed_at timestamp
+- Return: array of ScanWithDetails for all scanned skills, or maybe just summary
+
+But if there are many skills, this could take long and hit timeout. Maybe we should process in background? But the requirement says "Build the API route", and we don't have a background job system mentioned. So I'll do synchronous but with a note that for production we'd use a queue.
+
+Alternatively, we could create scans with status 'pending' and then have a separate worker. But that's more complex.
+
+Given the file route (app/api/scan/file/route.ts) likely does synchronous processing (since it's a single file), I'll follow that pattern.
+
+So for directory, we'll do:
+
+POST:
+- Get user
+- Validate skillIds array
+- For each skillId:
+  - Verify skill belongs to user
+  - Get skill content
+  - Create scan record (status 'scanning')
+  - Run analysis (call a helper function)
+  - Create findings
+  - Update scan to 'completed'
+- Return all scans with findings
+
+GET:
+- Could be used to list all scans for the user? Or get a specific scan by ID? The route is /api/scan/directory, not /api/scan/directory/[id]. So maybe GET returns all directory scans? But directory scans are just scans of multiple skills. There's no separate "directory scan" entity. So maybe GET returns all scans for the user, but that's already in another endpoint? Actually, there might be an endpoint for scans in general. But this is specifically for directory scanning. Perhaps GET returns the list of scans that were initiated via directory scan? But we don't have a flag.
+
+Maybe the GET is to retrieve a specific scan by ID passed as query param? Or to list all scans? The requirement says "Handle appropriate HTTP methods". So we need to implement GET, POST, PUT, DELETE. But what should each do?
+
+Let's think about typical REST:
+- POST /api/scan/directory: create a new directory scan (batch)
+- GET /api/scan/directory: list all directory scans (maybe with pagination) - but what is a directory scan? It could be a batch of scans. We might need a "batch" table. But we don't have that in types. So maybe we treat each scan as independent, and directory scanning is just a way to create multiple scans at once. So GET might return all scans for the user, but that's not specific to directory. Alternatively, we could have a "scan_group" or "directory_scan" table that groups multiple scans. But not in types.
+
+Given the types, we only have Skill, Scan, Finding. So a Scan is per skill. So directory scanning is just creating multiple Scan records. So the API for directory scanning might not need GET/PUT/DELETE because individual scans are managed elsewhere (like /api/scan/[id]?). But the requirement says to handle appropriate HTTP methods. So we need to implement them, but maybe they are not all used. We can implement:
+
+- GET: return all scans for the current user (maybe with filter for those created via directory? but we don't have that). Or return a list of scans with their skills and findings? That could be heavy. Alternatively, GET could return a summary of scans (like dashboard stats). But that's separate.
+
+Maybe the directory API is meant to manage the scanning process itself, not the results. So:
+- POST: start a directory scan (given a list of skill IDs)
+- GET: check status of a directory scan? But we need an ID. Could be query param ?id=... But then we need to store batch info.
+
+Given the ambiguity, I'll design a simple approach:
+
+We'll add a new table? But we can't change DB schema. So we must work with existing tables.
+
+Idea: When scanning a directory, we create multiple Scan records. We can return an array of those scans. For GET, we could accept query parameters to filter scans (by skill IDs, by status, etc). But that's more like a search endpoint.
+
+Alternatively, maybe the GET is to retrieve the results of a directory scan by a scan ID? But that would be a single scan, not directory.
+
+Wait, the route is /api/scan/directory. That suggests it's a resource "directory" under "scan". So maybe it's for scanning a directory path (like a folder on the server). But the UI summary says: "fetchSkills()" to get all skills, then select multiple skills. So it's about scanning multiple skills that are already uploaded. So the directory is not a file system directory but a collection of skills.
+
+Thus, the POST endpoint takes an array of skill IDs and scans them. The response could be the list of created scans.
+
+For GET, maybe it's to list all scans that were created via directory scanning? But we don't have a marker. We could add a "source" field to Scan? But we can't change types. So maybe we don't need GET. But requirement says handle appropriate HTTP methods. So we must implement GET, POST, PUT, DELETE. But we can make some return method not allowed if not needed, like in file route.
+
+Looking at file route: it has POST, GET (405), PUT (405). So they only implemented POST. So for directory, maybe we only need POST, and GET/PUT/DELETE return 405. But the requirement says "Handle appropriate HTTP methods", which might mean implement the ones that make sense. But it also says "Use the Supabase client to read/write the database", so GET might be used to read scans.
+
+Maybe the directory endpoint is meant to manage a "directory scan" entity that groups multiple scans. But we don't have that in types. So perhaps we need to create a new type? But we can't change types because they are provided as read-only? Actually, the user said "Here are summaries of some files present in my git repository. Do not propose changes to these files, treat them as *read-only*." So we cannot modify lib/types.ts. So we must work with existing types.
+
+Thus, the only way to group scans is by some property. We could use the Scan's started_at timestamp or something. But that's not reliable.
+
+Maybe the GET endpoint is to retrieve all scans for the current user, with optional filters. That would be useful for the history page? But there is already app/history/page.tsx that likely fetches scans from another endpoint. Let's check the summary: app/history/page.tsx shows filteredScans.map(scan => ...) and uses scan.findings, scan.skill.name, etc. So it expects ScanWithDetails. That page probably fetches from an API endpoint, maybe /api/scans or /api/scan? Not sure.
+
+Given the complexity, I'll implement a practical solution:
+
+POST /api/scan/directory:
+- Expect JSON body: { skillIds: string[] }
+- Authenticate user
+- Validate skillIds array, each must exist and belong to user
+- For each skillId:
+  - Create Scan record with status 'scanning'
+  - Analyze skill content (using a helper function that returns findings)
+  - Create Finding records linked to scan and skill
+  - Update Scan to 'completed' with completed_at
+- Return NextResponse.json({ scans: ScanWithDetails[] }, 200) or maybe just the scan IDs.
+
+But if there are many skills, this could be slow. We could process sequentially and return after all done.
+
+GET /api/scan/directory:
+- Could accept query parameters: ?skillId=... or ?status=... to filter scans.
+- But since this endpoint is specifically for directory scanning, maybe it returns all scans that were created in a batch? Without a batch ID, we can't tell. So maybe GET returns all scans for the user, but that duplicates other endpoints. Alternatively, we could return a list of scans with their skills, but that's heavy.
+
+Maybe the intended use: The directory scanning page (app/scan/directory/page.tsx) after selecting skills and clicking "Scan", it POSTs to this endpoint. Then it might redirect to a results page that shows the scans. That results page might fetch individual scans by ID from another endpoint. So this endpoint only needs POST. GET could be used to poll for status? But we return after completion.
+
+Given the file route only implements POST, I'll follow that pattern: implement POST, and for GET, PUT, DELETE return 405 Method Not Allowed.
+
+But the requirement says "Handle appropriate HTTP methods". That could mean implement the ones that are appropriate. For a scan directory endpoint, appropriate methods are POST (to initiate scan) and maybe GET (to retrieve results of a batch). But without a batch ID, GET is ambiguous.
+
+Maybe we can design: POST returns a batch ID (maybe the first scan ID or a composite). Then GET /api/scan/directory?batchId=... returns all scans in that batch. But we don't have a batch table. We could store a "batch_id" in Scan? But we can't modify types. So not possible.
+
+Alternatively, we could use the fact that all scans created in one POST will have similar started_at timestamps. But that's hacky.
+
+Given the constraints, I'll implement:
+
+- POST: as described, returns array of created scans (with findings) in the response.
+- GET: returns 405 (or maybe returns all scans for user? but that might be too broad). I'll check the other API route: app/api/scan/file/route.ts has GET returning 405. So they only want POST for scanning. So I'll do the same: GET, PUT, DELETE return 405.
+
+But the requirement says "Handle appropriate HTTP methods (GET, POST, PUT, DELETE)". That suggests we should implement all four. But maybe "appropriate" means we should implement them if they make sense. For a scanning endpoint, only POST makes sense. So I'll implement POST and for others return 405.
+
+However, the user explicitly listed: "Handle appropriate HTTP methods (GET, POST, PUT, DELETE)". That might be a checklist. So I should implement all four, but with appropriate behavior.
+
+Let's think: Could PUT be used to update a scan? For example, to cancel a scan? But we don't have a cancel operation. DELETE could delete a scan. That might be appropriate: allow deleting a scan (and its findings). GET could retrieve a specific scan by ID or list scans.
+
+But the route is /api/scan/directory, not /api/scan/directory/[id]. So it's a collection. So:
+- GET: list scans (maybe with filters)
+- POST: create new scans (batch)
+- PUT: update multiple scans? Not typical.
+- DELETE: delete multiple scans? Could be.
+
+But it's unusual to have PUT/DELETE on a collection without an ID. Usually, PUT is for updating a specific resource, and DELETE for deleting a specific resource. For collection, you might have POST to create, GET to list, and maybe DELETE to delete all? That's dangerous.
+
+Maybe the intended design is that this endpoint handles operations on scans that are part of a directory scan. But again, no grouping.
+
+Given the ambiguity, I'll look at the other API route pattern. The file route has:
+- POST: upload and scan a file
+- GET: 405
+- PUT: 405
+
+So they only use POST. So for consistency, I'll implement only POST for directory as well, and return 405 for others.
+
+But the user's requirement says "Handle appropriate HTTP methods (GET, POST, PUT, DELETE)". That might be a generic instruction for all API routes we build. But for this specific route, maybe only POST is appropriate. I'll implement POST and for others return 405 with message.
+
+Alternatively, I could implement GET to retrieve scans for the user, but that might conflict with other endpoints. There might be an endpoint /api/scans for that. Not sure.
+
+Given the limited info, I'll go with:
+
+POST: create scans for given skill IDs.
+GET: return 405
+PUT: return 405
+DELETE: return 405
+
+But wait, the user said "Build the API route: app/api/scan/directory/route.ts". They want a complete file. So I'll write a TypeScript file with the necessary imports and functions.
+
+I need to import types from lib/types.ts. I'll need to use the Supabase client.
+
+I'll also need a function to analyze skill content. The file route likely has an analyzeSkillContent function. I should replicate that logic here. But I don't have the code for that function. I'll need to infer from the description of what it detects: data exfiltration, behavior mismatches, privilege escalation. I'll write a simple analyzer that uses regex patterns to detect suspicious patterns in markdown content.
+
+But the requirement says "Use types from lib/types.ts". So I'll use those types for return values.
+
+Let's design the POST handler:
+
+1. Get user from supabase.auth.getUser()
+2. Parse request body as JSON: { skillIds: string[] }
+3. Validate: skillIds is array, non-empty, all strings.
+4. For each skillId:
+   a. Fetch skill from DB where id = skillId and user_id = user.id. If not found, skip or error? Probably error out if any invalid.
+   b. Create Scan record: insert into scans (skill_id, status, started_at) values (skillId, 'scanning', now())
+   c. Analyze skill.content to produce findings.
+   d. For each finding, insert into findings (scan_id, skill_id, category, severity, title, description, line_number?, code_snippet?, confidence?)
+   e. Update scan: set status='completed', completed_at=now()
+5. After all, fetch the scans with findings and skill details to return as ScanWithDetails[].
+
+But doing this sequentially for many skills could be slow. We could do parallel with Promise.all, but careful with DB connections. I'll do sequential for simplicity.
+
+Alternatively, we could create all scans first, then process each, then update. But if one fails, we should handle.
+
+I'll implement with try/catch for each skill so that one failure doesn't stop others? But then we need to report which succeeded/failed. Maybe we should fail the whole batch if any skill is invalid. But for user experience, maybe we want to scan as many as possible. I'll do: if any skill not found or not owned, return 400 with error. If analysis fails for a skill, mark that scan as failed with error_message, but continue others.
+
+So steps:
+
+- Validate user
+- Validate body: must have skillIds array
+- Fetch all skills in one query: select * from skills where id in (skillIds) and user_id = user.id. This ensures we only get skills belonging to user. Then check if we got all requested IDs. If not, return 400 with missing IDs.
+- For each skill:
+   - Create scan (status 'scanning')
+   - Try:
+        findings = analyzeSkillContent(skill.content, skill.id, scan.id)
+        Insert findings in batch
+        Update scan to completed
+     Catch error:
+        Update scan to failed with error_message
+- After processing all, fetch all scans with details (including findings and skill) for the created scans, and return.
+
+But note: analyzeSkillContent needs to be defined. I'll write a simple version that scans the content string for patterns.
+
+Patterns:
+- Data exfiltration: look for URLs (http://, https://), file writes outside workspace (like writing to /etc, /root, or absolute paths), env var access (process.env, $ENV_VAR)
+- Behavior vs description: maybe compare skill.name/description with actions? Hard. Could look for "description" field and see if content mentions actions that contradict? That's complex. For simplicity, maybe skip or do simple keyword matching.
+- Privilege escalation: look for "sudo", "su -", "chmod +s", "setuid", etc.
+
+But the requirement says "static analysis on markdown". So we parse markdown? Could just treat as text.
+
+I'll implement a basic analyzer that returns an array of Finding objects.
+
+I'll need to generate severity based on category? Could map: data_exfiltration -> high, behavior_mismatch -> medium, privilege_escalation -> critical. But we can have confidence.
+
+I'll create a function:
+
+function analyzeSkillContent(content: string, skillId: string, scanId: string): Finding[] {
+   const findings: Finding[] = [];
+   // split into lines to get line numbers
+   const lines = content.split('\n');
+   lines.forEach((line, index) => {
+      // check patterns
+      // data exfiltration: http(s)://, fetch, axios, curl, file writes: /etc/, /root/, /home/other, or absolute paths not in workspace? Hard to know workspace. Maybe just look for writes to sensitive paths.
+      // env var: process.env., $,
+      // privilege: sudo, su, chmod u+s, etc.
+   });
+   return findings;
+}
+
+But we need to return Finding objects with required fields: id, scan_id, skill_id, category, severity, title, description, line_number?, code_snippet?, confidence?, created_at.
+
+We can generate id as random? Or we can let DB generate if we insert without id? But the type requires id. In Supabase, we can use uuid. But in the function we can create temporary objects with placeholder id, then when inserting we can let DB generate. Actually, when inserting, we can omit id and let Supabase generate. But the Finding interface expects id. In the return type ScanWithDetails, findings have id. So after insertion, we need to fetch them with IDs. So in analyzeSkillContent, we can return partial findings without id, and then after insertion we can fetch them. Or we can generate UUIDs in the function. I'll generate UUIDs using crypto.randomUUID() if available, or a simple placeholder. Since this is server, we can use crypto.
+
+But to keep it simple, I'll have analyzeSkillContent return an array of objects with fields: category, severity, title, description, line_number, code_snippet, confidence. Then when inserting, we'll add scan_id, skill_id, and let id be generated. Then after insertion, we can fetch the findings by scan_id to get full objects.
+
+Alternatively, we can insert and then return the inserted rows which include id. But that would require multiple inserts. I'll do batch insert: collect all findings from all skills, insert them in one query? But they belong to different scans. So we need to insert per scan or collect all and insert with scan_id.
+
+I'll do: for each skill, after creating scan, call analyzeSkillContent to get findings array (without id). Then insert them using supabase.from('findings').insert(findingsWithScan). Then after all, fetch scans with findings.
+
+But we need to add scan_id and skill_id to each finding. So:
+
+const findingsToInsert = findings.map(f => ({
+   ...f,
+   scan_id: scan.id,
+   skill_id: skill.id,
+   created_at: new Date().toISOString()
+}));
+
+Then insert.
+
+Now, for the analysis function, I'll implement simple regex checks:
+
+Data exfiltration:
+- URLs: /https?:\/\/[^\s]+/g
+- File writes: /(?:write|create|copy|move|mv|cp)\s+.*(?:\/etc\/|\/root\/|\/home\/[^\/]+\/|\/var\/|\/usr\/)/i  (but this is crude)
+- Env var: /(?:process\.env|getenv|os\.environ|\$[A-Z_]+)/
+
+Behavior mismatch:
+- Could look for actions in content that contradict description. For simplicity, maybe if description contains "safe" but content has dangerous patterns, flag as mismatch. But that's not accurate. I'll skip for now or just have a placeholder.
+
+Privilege escalation:
+- sudo, su -, chmod +s, setuid, pkexec, etc.
+
+I'll assign severities:
+- data_exfiltration: high
+- behavior_mismatch: medium (if implemented)
+- privilege_escalation: critical
+
+Confidence: maybe 0.8 for pattern matches.
+
+I'll also include line_number and code_snippet (the line content).
+
+Now, for the API route, I need to handle errors and return appropriate status codes.
+
+Let's outline:
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { Scan, Finding, ScanWithDetails, Skill, SeverityLevel, FindingCategory } from '@/lib/types'
+
+But we may not need all types.
+
+I'll write:
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient()
+  
+  // Get user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
+  // Parse body
+  let body;
+  try {
+    body = await request.json()
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const { skillIds } = body
+  if (!Array.isArray(skillIds) || skillIds.length === 0) {
+    return NextResponse.json({ error: 'skillIds array is required' }, { status: 400 })
+  }
+
+  // Fetch skills belonging to user
+  const { data: skills, error: skillsError } = await supabase
+    .from('skills')
+    .select('*')
+    .in('id', skillIds)
+    .eq('user_id', user.id)
+
+  if (skillsError) {
+    return NextResponse.json({ error: 'Failed to fetch skills' }, { status: 500 })
+  }
+
+  // Check if all requested skill IDs were found
+  const foundIds = new Set(skills.map(s => s.id))
+  const missingIds = skillIds.filter(id => !foundIds.has(id))
+  if (missingIds.length > 0) {
+    return NextResponse.json({ error: 'Some skills not found or access denied', missingIds }, { status: 404 })
+  }
+
+  // Process each skill
+  const createdScans: Scan[] = []
+  const findingsByScanId = new Map<string, Finding[]>() // temporary findings without id
+
+  for (const skill of skills) {
+    // Create scan
+    const { data: scan, error: scanError } = await supabase
+      .from('scans')
+      .insert({
+        skill_id: skill.id,
+        status: 'scanning',
+        started_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (scanError || !scan) {
+      // Log error but continue? Or fail? I'll continue but log.
+      console.error(`Failed to create scan for skill ${skill.id}:`, scanError)
+      continue
+    }
+
+    try {
+      // Analyze content
+      const findings = analyzeSkillContent(skill.content, skill.id, scan.id)
+      // Prepare findings for insertion
+      const findingsToInsert = findings.map(f => ({
+        ...f,
+        scan_id: scan.id,
+        skill_id: skill.id,
+        created_at: new Date().toISOString()
+      }))
+
+      // Insert findings in batch
+      if (findingsToInsert.length > 0) {
+        const { error: findingsError } = await supabase
+          .from('findings')
+          .insert(findingsToInsert)
+        if (findingsError) {
+          throw findingsError
+        }
+      }
+
+      // Update scan to completed
+      const { error: updateError } = await supabase
+        .from('scans')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', scan.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      // Store scan for later fetch
+      createdScans.push(scan)
+      // We could also store findings in map, but we'll fetch later with joins.
+    } catch (error) {
+      // Update scan to failed
+      await supabase
+        .from('scans')
+        .update({
+          status: 'failed',
+          error_message: error instanceof Error ? error.message : 'Unknown error'
+        })
+        .eq('id', scan.id)
+    }
+  }
+
+  // Now fetch all created scans with details (skill and findings)
+  // We need to get ScanWithDetails. We can fetch scans with skill and findings.
+  const { data: scansWithDetails, error: fetchError } = await supabase
+    .from('scans')
+    .select(`
+      *,
+      skill:skills (*),
+      findings:findings (*)
+    `)
+    .in('id', createdScans.map(s => s.id))
+    .order('started_at', { ascending: false })
+
+  if (fetchError) {
+    return NextResponse.json({ error: 'Failed to fetch scan results' }, { status: 500 })
+  }
+
+  // The type of scansWithDetails should match ScanWithDetails
+  return NextResponse.json({ scans: scansWithDetails }, { status: 200 })
+}
+
+Now for GET, PUT, DELETE:
+
+export async function GET() {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+export async function PUT() {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+export async function DELETE() {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+But wait, the requirement says "Handle appropriate HTTP methods (GET, POST, PUT, DELETE)". That might mean we should implement them appropriately. But for this endpoint, only POST is appropriate. So returning 405 for others is appropriate.
+
+However, maybe they want GET to retrieve scans? But that would be a different endpoint pattern. I'll stick with 405.
+
+Now, I need to implement analyzeSkillContent. I'll put it in the same file.
+
+function analyzeSkillContent(content: string, skillId: string, scanId: string): Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>[] {
+   const findings: any[] = [];
+   const lines = content.split('\n');
+   lines.forEach((line, index) => {
+      const lineNum = index + 1;
+      // Data exfiltration: URLs
+      const urlRegex = /https?:\/\/[^\s]+/g;
+      let match;
+      while ((match = urlRegex.exec(line)) !== null) {
+        findings.push({
+          category: 'data_exfiltration',
+          severity: 'high',
+          title: 'Potential data exfiltration via URL',
+          description: `URL detected: ${match[0]}`,
+          line_number: lineNum,
+          code_snippet: line.trim(),
+          confidence: 0.9
+        });
+      }
+
+      // Env var access
+      const envRegex = /(?:process\.env|getenv|os\.environ|\$[A-Z_]+)/;
+      if (envRegex.test(line)) {
+        findings.push({
+          category: 'data_exfiltration',
+          severity: 'medium',
+          title: 'Environment variable access',
+          description: 'Skill accesses environment variables which could leak sensitive data.',
+          line_number: lineNum,
+          code_snippet: line.trim(),
+          confidence: 0.8
+        });
+      }
+
+      // File writes outside workspace (simple: writing to absolute paths like /etc/, /root/, /home/other)
+      const fileWriteRegex = /(?:write|create|copy|move|mv|cp)\s+.*(?:\/etc\/|\/root\/|\/home\/[^\/]+\/|\/var\/|\/usr\/)/i;
+      if (fileWriteRegex.test(line)) {
+        findings.push({
+          category: 'data_exfiltration',
+          severity: 'high',
+          title: 'Potentially dangerous file operation',
+          description: 'Skill performs file write to a sensitive system directory.',
+          line_number: lineNum,
+          code_snippet: line.trim(),
+          confidence: 0.7
+        });
+      }
+
+      // Privilege escalation
+      const privRegex = /(?:sudo|su\s+-|chmod\s+u\+s|setuid|pkexec)/;
+      if (privRegex.test(line)) {
+        findings.push({
+          category: 'privilege_escalation',
+          severity: 'critical',
+          title: 'Privilege escalation attempt',
+          description: 'Skill uses commands that may elevate privileges.',
+          line_number: lineNum,
+          code_snippet: line.trim(),
+          confidence: 0.95
+        });
+      }
+
+      // Behavior mismatch: if description mentions "safe" but we found dangerous patterns? We don't have description here. We could pass skill.description to function. But we only have content. Maybe we can look for contradictions within content? Not easy. I'll skip for now.
+   });
+
+   // Also check for behavior mismatch: maybe if content contains both "safe" and dangerous patterns? That's weak.
+   // I'll add a simple check: if content includes "safe" or "harmless" and we already found dangerous findings, add a mismatch finding.
+   if (findings.length > 0) {
+      const contentLower = content.toLowerCase();
+      if (contentLower.includes('safe') || contentLower.includes('harmless') || contentLower.includes('no risk')) {
+         findings.push({
+            category: 'behavior_mismatch',
+            severity: 'medium',
+            title: 'Behavior vs description mismatch',
+            description: 'Skill claims to be safe but contains potentially dangerous patterns.',
+            confidence: 0.6
+         });
+      }
+   }
+
+   return findings;
+}
+
+But note: the function signature in file route might be different. But we can define our own.
+
+Also, we need to import types. I'll import FindingCategory, SeverityLevel from '@/lib/types'.
+
+But the Finding type requires id, scan_id, skill_id, created_at. We are omitting those, so return type should be Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>[].
+
+Alternatively, we can define a local interface for partial finding.
+
+I'll do:
+
+type NewFinding = Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>
+
+But we need to import Finding. So:
+
+import type { Finding, SeverityLevel, FindingCategory } from '@/lib/types'
+
+Then function returns NewFinding[].
+
+But we also need to ensure category is of type FindingCategory, severity of type SeverityLevel. I'll cast as needed.
+
+Now, about the database: The scans table has columns: id, skill_id, status, started_at, completed_at, error_message. That matches.
+
+The findings table: id, scan_id, skill_id, category, severity, title, description, line_number, code_snippet, confidence, created_at.
+
+So our insert matches.
+
+Now, we must consider that the Supabase client is created with createClient from server.ts. That's fine.
+
+Also, we need to handle errors properly.
+
+One more thing: The POST request might be large if many skills. We should limit? Not required.
+
+Now, I'll write the complete file.
+
+But the file path is app/api/scan/directory/route.ts. So it's a Next.js route handler.
+
+I'll structure:
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import type { Finding, SeverityLevel, FindingCategory, Scan } from '@/lib/types'
+
+type NewFinding = Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>
+
+function analyzeSkillContent(content: string, skillId: string, scanId: string): NewFinding[] {
+   // implementation
+}
+
+export async function POST(request: NextRequest) {
+   // implementation
+}
+
+export async function GET() {
+   return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+export async function PUT() {
+   return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+export async function DELETE() {
+   return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+But wait, the file route also has a GET that returns 405 with message "Method not allowed. Use POST to upload a file." So maybe we should customize messages. I'll do similar: "Method not allowed. Use POST to scan a directory."
+
+But the requirement says "Return NextResponse.json() with proper status codes". So 405 is proper.
+
+Now, I need to ensure that the analyzeSkillContent function is defined before use.
+
+Also, I need to consider that the skill.content might be large. Splitting into lines is fine.
+
+I'll also add a check for empty content.
+
+Now, about the behavior mismatch: I'll implement a more robust check? Not needed.
+
+One more: The analysis might produce duplicate findings for same line? We can deduplicate by title and line? Not necessary.
+
+Now, I'll write the code.
+
+But before finalizing, let's think about potential issues:
+
+- The Supabase client: createClient from server.ts returns a client that uses cookies. That's fine.
+
+- We are using .select('*') for skills and scans. That's okay.
+
+- When inserting findings, we are inserting many. Could exceed row limit? Not likely.
+
+- We are not using transactions. If one insert fails after some scans created, we might have partial scans. That's okay; we mark failed scans.
+
+- We are not handling the case where analyzeSkillContent throws. We catch and mark scan as failed.
+
+- We are not limiting the number of skills. Could be DoS. But not required.
+
+- We are not checking for duplicate skillIds in request. Could cause duplicate scans. We could deduplicate skillIds first. I'll do: const uniqueSkillIds = [...new Set(skillIds)]; and use that.
+
+- Also, we should ensure skillIds are strings.
+
+Now, I'll write the code accordingly.
+
+But the user said "Build the API route". So I need to output the entire file content.
+
+Let's produce the file listing.
+
+One more: The file route might have a different pattern for handling file uploads (FormData). But here we expect JSON.
+
+Now, I'll write the code.
+
+I'll also add some comments for clarity.
+
+Let's produce the final file.
+
+------------
+► **ANSWER**
+
+app/api/scan/directory/route.ts
+```
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import type { Finding, SeverityLevel, FindingCategory, Scan } from '@/lib/types'
+
+type NewFinding = Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>
+
+function analyzeSkillContent(content: string, skillId: string, scanId: string): NewFinding[] {
+  const findings: NewFinding[] = []
+  const lines = content.split('\n')
+
+  lines.forEach((line, index) => {
+    const lineNum = index + 1
+    const trimmedLine = line.trim()
+
+    // Data exfiltration: URLs
+    const urlRegex = /https?:\/\/[^\s]+/g
+    let match
+    while ((match = urlRegex.exec(line)) !== null) {
+      findings.push({
+        category: 'data_exfiltration' as FindingCategory,
+        severity: 'high' as SeverityLevel,
+        title: 'Potential data exfiltration via URL',
+        description: `URL detected: ${match[0]}`,
+        line_number: lineNum,
+        code_snippet: trimmedLine,
+        confidence: 0.9
+      })
+    }
+
+    // Environment variable access
+    const envRegex = /(?:process\.env|getenv|os\.environ|\$[A-Z_]+)/
+    if (envRegex.test(line)) {
+      findings.push({
+        category: 'data_exfiltration' as FindingCategory,
+        severity: 'medium' as SeverityLevel,
+        title: 'Environment variable access',
+        description: 'Skill accesses environment variables which could leak sensitive data.',
+        line_number: lineNum,
+        code_snippet: trimmedLine,
+        confidence: 0.8
+      })
+    }
+
+    // Dangerous file operations (writes to sensitive system paths)
+    const fileWriteRegex = /(?:write|create|copy|move|mv|cp)\s+.*(?:\/etc\/|\/root\/|\/home\/[^\/]+\/|\/var\/|\/usr\/)/i
+    if (fileWriteRegex.test(line)) {
+      findings.push({
+        category: 'data_exfiltration' as FindingCategory,
+        severity: 'high' as SeverityLevel,
+        title: 'Potentially dangerous file operation',
+        description: 'Skill performs file write to a sensitive system directory.',
+        line_number: lineNum,
+        code_snippet: trimmedLine,
+        confidence: 0.7
+      })
+    }
+
+    // Privilege escalation
+    const privRegex = /(?:sudo|su\s+-|chmod\s+u\+s|setuid|pkexec)/
+    if (privRegex.test(line)) {
+      findings.push({
+        category: 'privilege_escalation' as FindingCategory,
+        severity: 'critical' as SeverityLevel,
+        title: 'Privilege escalation attempt',
+        description: 'Skill uses commands that may elevate privileges.',
+        line_number: lineNum,
+        code_snippet: trimmedLine,
+        confidence: 0.95
+      })
+    }
+  })
+
+  // Behavior mismatch: if content claims to be safe but we found dangerous patterns
+  if (findings.length > 0) {
+    const contentLower = content.toLowerCase()
+    if (contentLower.includes('safe') || contentLower.includes('harmless') || contentLower.includes('no risk')) {
+      findings.push({
+        category: 'behavior_mismatch' as FindingCategory,
+        severity: 'medium' as SeverityLevel,
+        title: 'Behavior vs description mismatch',
+        description: 'Skill claims to be safe but contains potentially dangerous patterns.',
+        confidence: 0.6
+      })
+    }
+  }
+
+  return findings
+}
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient()
+
+  // Get authenticated user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Authentication required' },
+      { status: 401 }
+    )
+  }
+
+  // Parse request body
+  let body
+  try {
+    body = await request.json()
+  } catch (e) {
+    return NextResponse.json(
+      { error: 'Invalid JSON' },
+      { status: 400 }
+    )
+  }
+
+  const { skillIds } = body as { skillIds: string[] }
+  if (!skillIds || !Array.isArray(skillIds) || skillIds.length === 0) {
+    return NextResponse.json(
+      { error: 'skillIds array is required and must not be empty' },
+      { status: 400 }
+    )
+  }
+
+  // Deduplicate skill IDs
+  const uniqueSkillIds = [...new Set(skillIds)]
+
+  // Fetch all requested skills belonging to the user
+  const { data: skills, error: skillsError } = await supabase
+    .from('skills')
+    .select('*')
+    .in('id', uniqueSkillIds)
+    .eq('user_id', user.id)
+
+  if (skillsError) {
+    return NextResponse.json(
+      { error: 'Failed to fetch skills' },
+      { status: 500 }
+    )
+  }
+
+  // Verify all requested skill IDs were found and belong to user
+  const foundIds = new Set(skills.map(s => s.id))
+  const missingIds = uniqueSkillIds.filter(id => !foundIds.has(id))
+  if (missingIds.length > 0) {
+    return NextResponse.json(
+      { error: 'Some skills not found or access denied', missingIds },
+      { status: 404 }
+    )
+  }
+
+  const createdScans: Scan[] = []
+
+  // Process each skill
+  for (const skill of skills) {
+    // Create a new scan record
+    const { data: scan, error: scanError } = await supabase
+      .from('scans')
+      .insert({
+        skill_id: skill.id,
+        status: 'scanning',
+        started_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (scanError || !scan) {
+      console.error(`Failed to create scan for skill ${skill.id}:`, scanError)
+      continue
+    }
+
+    try {
+      // Analyze skill content
+      const findings = analyzeSkillContent(skill.content, skill.id, scan.id)
+
+      // Insert findings if any
+      if (findings.length > 0) {
+        const findingsToInsert = findings.map(f => ({
+          ...f,
+          scan_id: scan.id,
+          skill_id: skill.id,
+          created_at: new Date().toISOString()
+        }))
+
+        const { error: findingsError } = await supabase
+          .from('findings')
+          .insert(findingsToInsert)
+
+        if (findingsError) {
+          throw findingsError
+        }
+      }
+
+      // Update scan to completed
+      const { error: updateError } = await supabase
+        .from('scans')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', scan.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      createdScans.push(scan)
+    } catch (error) {
+      // Mark scan as failed
+      await supabase
+        .from('scans')
+        .update({
+          status: 'failed',
+          error_message: error instanceof Error ? error.message : 'Unknown error during analysis'
+        })
+        .eq('id', scan.id)
+    }
+  }
+
+  // Fetch all created scans with details (skill and findings)
+  const { data: scansWithDetails, error: fetchError } = await supabase
+    .from('scans')
+    .select(`
+      *,
+      skill:skills (*),
+      findings:findings (*)
+    `)
+    .in('id', createdScans.map(s => s.id))
+    .order('started_at', { ascending: false })
+
+  if (fetchError) {
+    return NextResponse.json(
+      { error: 'Failed to fetch scan results' },
+      { status: 500 }
+    )
+  }
+
+  return NextResponse.json(
+    { scans: scansWithDetails },
+    { status: 200 }
+  )
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method not allowed. Use POST to scan a directory.' },
+    { status: 405 }
+  )
+}
+
+export async function PUT() {
+  return NextResponse.json(
+    { error: 'Method not allowed' },
+    { status: 405 }
+  )
+}
+
+export async function DELETE() {
+  return NextResponse.json(
+    { error: 'Method not allowed' },
+    { status: 405 }
+  )
+}
+```
+Tokens: 3.3k sent, 10k received.
+Applied edit to app/api/scan/directory/route.ts
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+summarizer unexpectedly failed for all models
+[20:05:53]   [8/10] Done (7350 bytes)
