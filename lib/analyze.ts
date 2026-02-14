@@ -409,7 +409,7 @@ export function analyzeSkillContent(
     }
 
     // Data exfiltration: file writes (general)
-    if (/(writeFile|fs\.writeFile|open\s*\(.*['"]w|>\s*[^>]+)/i.test(line)) {
+    if (/(writeFile|fs\.writeFile|open\s*\(.*['"]w|[^-]>\s*\/[a-z])/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -469,7 +469,7 @@ export function analyzeSkillContent(
     }
 
     // Behavior mismatch: destructive operations
-    if (/(rm\s+-rf|dd\s+|mkfs|format\s+)/i.test(line)) {
+    if (/(rm\s+-rf|\bdd\s+if=|mkfs\s|format\s+[cC]:)/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
