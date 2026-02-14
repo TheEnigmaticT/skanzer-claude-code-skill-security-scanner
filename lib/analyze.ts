@@ -99,11 +99,19 @@ function checkMalwarePatterns(
 ): NewFinding[] {
   const findings: NewFinding[] = []
   const lines = content.split('\n')
+  let inCode = false
 
   lines.forEach((line, index) => {
     const lineNum = index + 1
     const trimmed = line.trim()
+    if (/^```/.test(trimmed)) {
+      inCode = !inCode
+      return
+    }
     if (!trimmed) return
+    // Malware patterns in prose are mostly just documentation/discussion —
+    // only flag patterns found inside code blocks
+    if (!inCode) return
     const snippet = trimmed.length > 100 ? trimmed.substring(0, 100) + '...' : trimmed
 
     // Reverse shells
@@ -354,44 +362,44 @@ export function analyzeSkillContent(
   findings.push(...checkSkillStructure(content, skillId, scanId))
 
   // --- Phase 2: Line-by-line security patterns ---
+  let inCode = false
   lines.forEach((line, index) => {
     const lineNum = index + 1
     const trimmedLine = line.trim()
+
+    // Track fenced code blocks
+    if (/^```/.test(trimmedLine)) {
+      inCode = !inCode
+      return
+    }
     if (!trimmedLine) return
 
     const snippet = trimmedLine.length > 100 ? trimmedLine.substring(0, 100) + '...' : trimmedLine
 
-    // Data exfiltration: URLs — skip markdown doc links and well-known safe domains
+    // Data exfiltration: URLs
+    // Prose/markdown links are not executable — only flag URLs in code blocks
+    // or lines with an executable context (curl, wget, fetch, etc.)
     const urlRegex = /https?:\/\/[^\s)>"'`\]]+/g
-    const safeHostRegex = /^https?:\/\/(github\.com|gitlab\.com|npmjs\.com|docs\.|claude\.ai|anthropic\.com|x\.com|twitter\.com|basecamp\.com|stackoverflow\.com|wikipedia\.org|developer\.mozilla\.org|medium\.com|dev\.to|youtube\.com|en\.wikipedia|reddit\.com|discord\.com|slack\.com|vercel\.com|netlify\.com|supabase\.com|nodejs\.org|python\.org|rust-lang\.org|go\.dev|nextjs\.org|reactjs\.org|tailwindcss\.com|typescriptlang\.org)(\/|$)/i
-    const isMarkdownLink = /\[.*?\]\(https?:\/\//.test(line)
+    const hasExecContext = /(curl|wget|fetch\(|axios\.|requests\.|http\.get|\.download|invoke-webrequest)/i.test(line)
     let match
-    const urlsOnLine: string[] = []
-    while ((match = urlRegex.exec(line)) !== null) {
-      const url = match[0]
-      // Skip safe documentation/reference domains
-      if (safeHostRegex.test(url)) continue
-      urlsOnLine.push(url)
-    }
-    // If all URLs on this line are in markdown link syntax and none are suspicious, skip
-    if (urlsOnLine.length > 0 && !(isMarkdownLink && urlsOnLine.length === 0)) {
-      for (const url of urlsOnLine) {
+    if (inCode || hasExecContext) {
+      while ((match = urlRegex.exec(line)) !== null) {
         findings.push({
           scan_id: scanId,
           skill_id: skillId,
           category: 'data_exfiltration',
-          severity: 'medium',
-          title: 'Network communication detected',
-          description: `URL detected: ${url}`,
+          severity: inCode && hasExecContext ? 'high' : 'medium',
+          title: 'URL in executable context',
+          description: `URL detected in ${inCode ? 'code block' : 'command context'}: ${match[0]}`,
           line_number: lineNum,
           code_snippet: snippet,
-          confidence: 0.9
+          confidence: inCode ? 0.85 : 0.7
         })
       }
     }
 
-    // Data exfiltration: fetch/curl/wget/axios
-    if (/(fetch\(|axios\.|curl\s+|wget\s+)/i.test(line)) {
+    // Data exfiltration: fetch/curl/wget/axios — only in code blocks
+    if (inCode && /(fetch\(|axios\.|curl\s+|wget\s+)/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -405,8 +413,8 @@ export function analyzeSkillContent(
       })
     }
 
-    // Data exfiltration: environment variable access
-    if (/(?:process\.env|os\.getenv|getenv\(|os\.environ|\$[A-Z_]{2,})/i.test(line)) {
+    // Data exfiltration: environment variable access — only in code blocks
+    if (inCode && /(?:process\.env|os\.getenv|getenv\(|os\.environ|\$[A-Z_]{2,})/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -420,8 +428,8 @@ export function analyzeSkillContent(
       })
     }
 
-    // Data exfiltration: file writes (general)
-    if (/(writeFile|fs\.writeFile|open\s*\(.*['"]w|[^-]>\s*\/[a-z])/i.test(line)) {
+    // Data exfiltration: file writes (general) — only in code blocks
+    if (inCode && /(writeFile|fs\.writeFile|open\s*\(.*['"]w|[^-]>\s*\/[a-z])/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -435,8 +443,8 @@ export function analyzeSkillContent(
       })
     }
 
-    // Data exfiltration: dangerous file writes to system paths
-    if (/(?:write|create|copy|move|mv|cp)\s+.*(?:\/etc\/|\/root\/|\/home\/[^/]+\/|\/var\/|\/usr\/)/i.test(line)) {
+    // Data exfiltration: dangerous file writes to system paths — only in code blocks
+    if (inCode && /(?:write|create|copy|move|mv|cp)\s+.*(?:\/etc\/|\/root\/|\/home\/[^/]+\/|\/var\/|\/usr\/)/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -450,8 +458,8 @@ export function analyzeSkillContent(
       })
     }
 
-    // Privilege escalation
-    if (/(?:sudo\s+|su\s+-|chmod\s+u?\+s|setuid|setgid|pkexec)/i.test(line)) {
+    // Privilege escalation — only in code blocks
+    if (inCode && /(?:sudo\s+|su\s+-|chmod\s+u?\+s|setuid|setgid|pkexec)/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -465,8 +473,8 @@ export function analyzeSkillContent(
       })
     }
 
-    // Privilege escalation: permission modifications
-    if (/(chmod\s+|chown\s+)/i.test(line) && !/chmod\s+u?\+s/i.test(line)) {
+    // Privilege escalation: permission modifications — only in code blocks
+    if (inCode && /(chmod\s+|chown\s+)/i.test(line) && !/chmod\s+u?\+s/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -480,8 +488,8 @@ export function analyzeSkillContent(
       })
     }
 
-    // Behavior mismatch: destructive operations
-    if (/(rm\s+-rf|\bdd\s+if=|mkfs\s|format\s+[cC]:)/i.test(line)) {
+    // Behavior mismatch: destructive operations — only in code blocks
+    if (inCode && /(rm\s+-rf|\bdd\s+if=|mkfs\s|format\s+[cC]:)/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -495,8 +503,8 @@ export function analyzeSkillContent(
       })
     }
 
-    // Behavior mismatch: network listeners
-    if (/(nc\s+-[el]|netcat\s+-[el]|socat\s+)/i.test(line)) {
+    // Behavior mismatch: network listeners — only in code blocks
+    if (inCode && /(nc\s+-[el]|netcat\s+-[el]|socat\s+)/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
