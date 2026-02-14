@@ -94,22 +94,14 @@ export default function DashboardPage() {
           }
         })
 
-        const severityCounts: Record<SeverityLevel, number> = {} as any
-        const categoryCounts: Record<FindingCategory, number> = {} as any
+        const severityCounts: Record<SeverityLevel, number> = { low: 0, medium: 0, high: 0, critical: 0 }
+        const categoryCounts: Record<FindingCategory, number> = { malware: 0, data_exfiltration: 0, behavior_mismatch: 0, privilege_escalation: 0, other: 0 }
 
-        await Promise.all(
-          severities.map(async severity => {
-            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', severity)
-            severityCounts[severity] = count || 0
-          })
-        )
-
-        await Promise.all(
-          categories.map(async category => {
-            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('category', category)
-            categoryCounts[category] = count || 0
-          })
-        )
+        // Count findings from already-fetched latest findings instead of separate queries
+        latestFindings.forEach(finding => {
+          if (finding.severity in severityCounts) severityCounts[finding.severity]++
+          if (finding.category in categoryCounts) categoryCounts[finding.category]++
+        })
 
         const { data: recentFindingsData, error: recentFindingsError } = await supabase
           .from('findings')
