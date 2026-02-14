@@ -26,6 +26,10 @@
   --font-mono: var(--font-space-mono), ui-monospace, monospace;
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 body {
   background: var(--brand-bg);
   color: var(--brand-text);
