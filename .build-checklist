@@ -1,0 +1,10 @@
+app/dashboard/page.tsx # Security dashboard with severity ratings and safe/unsafe skill counts
+app/scan/file/page.tsx # Upload interface for single markdown skill file analysis
+app/scan/directory/page.tsx # Directory scanning interface for bulk skill analysis
+app/scans/[id]/page.tsx # Detailed findings showing data exfiltration, privilege escalation, and behavior mismatches
+app/history/page.tsx # Scan history with filtering by severity and detection patterns
+app/settings/page.tsx # Detection rules configuration for static analysis patterns
+app/api/scan/file/route.ts # Handle single file upload and static analysis for suspicious patterns
+app/api/scan/directory/route.ts # Process directory scanning for multiple skill files
+app/api/scans/route.ts # Fetch scan history and aggregated security statistics
+app/api/scans/[id]/route.ts # Retrieve detailed findings with severity breakdown for specific scan
