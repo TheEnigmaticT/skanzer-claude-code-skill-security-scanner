@@ -37,7 +37,7 @@ export default async function ScanDetailPage({ params }: PageProps) {
     return acc
   }, {} as Record<FindingCategory, typeof scanWithDetails.findings>)
 
-  const categories: FindingCategory[] = ['data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
+  const categories: FindingCategory[] = ['malware', 'data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
 
   const getSeverityColor = (severity: SeverityLevel) => {
     switch (severity) {
@@ -56,6 +56,8 @@ export default async function ScanDetailPage({ params }: PageProps) {
 
   const getCategoryLabel = (category: FindingCategory) => {
     switch (category) {
+      case 'malware':
+        return 'Malware'
       case 'data_exfiltration':
         return 'Data Exfiltration'
       case 'behavior_mismatch':

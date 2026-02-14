@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   const severities: Array<SeverityLevel> = ['low', 'medium', 'high', 'critical']
-  const categories: Array<FindingCategory> = ['data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
+  const categories: Array<FindingCategory> = ['malware', 'data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
 
   useEffect(() => {
     const fetchData = async () => {

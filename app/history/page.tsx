@@ -16,7 +16,7 @@ export default function HistoryPage() {
   const [selectedCategories, setSelectedCategories] = useState<FindingCategory[]>([])
 
   const severities: SeverityLevel[] = ['low', 'medium', 'high', 'critical']
-  const categories: FindingCategory[] = ['data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
+  const categories: FindingCategory[] = ['malware', 'data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
 
   useEffect(() => {
     async function fetchScans() {
@@ -90,6 +90,8 @@ export default function HistoryPage() {
 
   const getCategoryLabel = (category: FindingCategory) => {
     switch (category) {
+      case 'malware':
+        return 'Malware'
       case 'data_exfiltration':
         return 'Data Exfiltration'
       case 'behavior_mismatch':

@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
       critical: 0
     }
     const categoryCounts: Record<FindingCategory, number> = {
+      malware: 0,
       data_exfiltration: 0,
       behavior_mismatch: 0,
       privilege_escalation: 0,

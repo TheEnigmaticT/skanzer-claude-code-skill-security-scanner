@@ -1,7 +1,7 @@
 export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical'
 export type ScanStatus = 'pending' | 'scanning' | 'completed' | 'failed'
 export const SCAN_STATUS_VALUES = ['pending', 'scanning', 'completed', 'failed'] as const
-export type FindingCategory = 'data_exfiltration' | 'behavior_mismatch' | 'privilege_escalation' | 'other'
+export type FindingCategory = 'data_exfiltration' | 'behavior_mismatch' | 'privilege_escalation' | 'malware' | 'other'
 
 export interface Skill {
   id: string
