@@ -1,6 +1,3 @@
--- Enable UUID extension
-create extension if not exists "uuid-ossp";
-
 -- Create enums
 create type severity_level as enum ('low', 'medium', 'high', 'critical');
 create type scan_status as enum ('pending', 'scanning', 'completed', 'failed');
@@ -8,7 +5,7 @@ create type finding_category as enum ('data_exfiltration', 'behavior_mismatch', 
 
 -- Skills table
 create table skills (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users on delete cascade not null,
   name varchar(255) not null,
   description text,
@@ -20,7 +17,7 @@ create table skills (
 
 -- Scans table
 create table scans (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   skill_id uuid references skills on delete cascade not null,
   status scan_status default 'pending' not null,
   started_at timestamp with time zone default timezone('utc'::text, now()) not null,
@@ -30,7 +27,7 @@ create table scans (
 
 -- Findings table
 create table findings (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   scan_id uuid references scans on delete cascade not null,
   skill_id uuid references skills on delete cascade not null,
   category finding_category not null,
