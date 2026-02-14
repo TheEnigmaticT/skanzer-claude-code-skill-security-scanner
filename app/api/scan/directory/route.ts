@@ -1,91 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import type { Finding, SeverityLevel, FindingCategory, Scan } from '@/lib/types'
-
-type NewFinding = Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>
-
-function analyzeSkillContent(content: string, skillId: string, scanId: string): NewFinding[] {
-  const findings: NewFinding[] = []
-  const lines = content.split('\n')
-
-  lines.forEach((line, index) => {
-    const lineNum = index + 1
-    const trimmedLine = line.trim()
-
-    // Data exfiltration: URLs
-    const urlRegex = /https?:\/\/[^\s]+/g
-    let match
-    while ((match = urlRegex.exec(line)) !== null) {
-      findings.push({
-        category: 'data_exfiltration' as FindingCategory,
-        severity: 'high' as SeverityLevel,
-        title: 'Potential data exfiltration via URL',
-        description: `URL detected: ${match[0]}`,
-        line_number: lineNum,
-        code_snippet: trimmedLine,
-        confidence: 0.9
-      })
-    }
-
-    // Environment variable access
-    const envRegex = /(?:process\.env|getenv|os\.environ|\$[A-Z_]+)/
-    if (envRegex.test(line)) {
-      findings.push({
-        category: 'data_exfiltration' as FindingCategory,
-        severity: 'medium' as SeverityLevel,
-        title: 'Environment variable access',
-        description: 'Skill accesses environment variables which could leak sensitive data.',
-        line_number: lineNum,
-        code_snippet: trimmedLine,
-        confidence: 0.8
-      })
-    }
-
-    // Dangerous file operations (writes to sensitive system paths)
-    const fileWriteRegex = /(?:write|create|copy|move|mv|cp)\s+.*(?:\/etc\/|\/root\/|\/home\/[^\/]+\/|\/var\/|\/usr\/)/i
-    if (fileWriteRegex.test(line)) {
-      findings.push({
-        category: 'data_exfiltration' as FindingCategory,
-        severity: 'high' as SeverityLevel,
-        title: 'Potentially dangerous file operation',
-        description: 'Skill performs file write to a sensitive system directory.',
-        line_number: lineNum,
-        code_snippet: trimmedLine,
-        confidence: 0.7
-      })
-    }
-
-    // Privilege escalation
-    const privRegex = /(?:sudo|su\s+-|chmod\s+u\+s|setuid|pkexec)/
-    if (privRegex.test(line)) {
-      findings.push({
-        category: 'privilege_escalation' as FindingCategory,
-        severity: 'critical' as SeverityLevel,
-        title: 'Privilege escalation attempt',
-        description: 'Skill uses commands that may elevate privileges.',
-        line_number: lineNum,
-        code_snippet: trimmedLine,
-        confidence: 0.95
-      })
-    }
-  })
-
-  // Behavior mismatch: if content claims to be safe but we found dangerous patterns
-  if (findings.length > 0) {
-    const contentLower = content.toLowerCase()
-    if (contentLower.includes('safe') || contentLower.includes('harmless') || contentLower.includes('no risk')) {
-      findings.push({
-        category: 'behavior_mismatch' as FindingCategory,
-        severity: 'medium' as SeverityLevel,
-        title: 'Behavior vs description mismatch',
-        description: 'Skill claims to be safe but contains potentially dangerous patterns.',
-        confidence: 0.6
-      })
-    }
-  }
-
-  return findings
-}
+import { analyzeSkillContent } from '@/lib/analyze'
+import type { Scan } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -171,16 +87,9 @@ export async function POST(request: NextRequest) {
 
       // Insert findings if any
       if (findings.length > 0) {
-        const findingsToInsert = findings.map(f => ({
-          ...f,
-          scan_id: scan.id,
-          skill_id: skill.id,
-          created_at: new Date().toISOString()
-        }))
-
         const { error: findingsError } = await supabase
           .from('findings')
-          .insert(findingsToInsert)
+          .insert(findings)
 
         if (findingsError) {
           throw findingsError

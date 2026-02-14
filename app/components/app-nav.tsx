@@ -8,6 +8,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/scan/file', label: 'Scan File' },
   { href: '/scan/directory', label: 'Scan Directory' },
+  { href: '/scan/github', label: 'Scan GitHub' },
   { href: '/history', label: 'History' },
   { href: '/settings', label: 'Settings' },
 ]

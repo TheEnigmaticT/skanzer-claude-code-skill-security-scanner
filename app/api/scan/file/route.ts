@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import type { Finding, FindingCategory, SeverityLevel, Scan, Skill } from '@/lib/types'
+import { analyzeSkillContent } from '@/lib/analyze'
 
 export async function POST(request: NextRequest) {
   try {
@@ -139,95 +139,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-function analyzeSkillContent(
-  content: string, 
-  skillId: string, 
-  scanId: string
-): Omit<Finding, 'id' | 'created_at'>[] {
-  const findings: Omit<Finding, 'id' | 'created_at'>[] = []
-  const lines = content.split('\n')
-  
-  // Patterns to detect
-  const patterns = [
-    // Data exfiltration patterns
-    {
-      regex: /(https?:\/\/|fetch\(|axios\.|curl\s+|wget\s+)/i,
-      category: 'data_exfiltration' as FindingCategory,
-      severity: 'medium' as SeverityLevel,
-      title: 'Network communication detected',
-      description: 'The skill contains network calls which could be used for data exfiltration.'
-    },
-    {
-      regex: /(process\.env|os\.getenv|getenv\()/i,
-      category: 'data_exfiltration' as FindingCategory,
-      severity: 'high' as SeverityLevel,
-      title: 'Environment variable access',
-      description: 'The skill accesses environment variables which may contain sensitive information.'
-    },
-    {
-      regex: /(writeFile|fs\.writeFile|open\s*\(.*['"]w|>\s*[^>]+)/i,
-      category: 'data_exfiltration' as FindingCategory,
-      severity: 'high' as SeverityLevel,
-      title: 'File write operation',
-      description: 'The skill writes to files which could be used to exfiltrate data.'
-    },
-    // Privilege escalation patterns
-    {
-      regex: /(sudo\s+|su\s+|\$\(|\`)/i,
-      category: 'privilege_escalation' as FindingCategory,
-      severity: 'high' as SeverityLevel,
-      title: 'Privilege escalation attempt',
-      description: 'The skill uses sudo, su, or command substitution which could lead to privilege escalation.'
-    },
-    {
-      regex: /(chmod\s+|chown\s+|setuid|setgid)/i,
-      category: 'privilege_escalation' as FindingCategory,
-      severity: 'high' as SeverityLevel,
-      title: 'Permission modification',
-      description: 'The skill modifies file permissions which could be used for privilege escalation.'
-    },
-    // Behavior mismatch patterns (basic heuristics)
-    {
-      regex: /(rm\s+-rf|dd\s+|mkfs|format\s+)/i,
-      category: 'behavior_mismatch' as FindingCategory,
-      severity: 'critical' as SeverityLevel,
-      title: 'Destructive operation',
-      description: 'The skill contains potentially destructive commands that may not match a typical skill description.'
-    },
-    {
-      regex: /(nc\s+-[el]|netcat\s+-[el]|socat\s+)/i,
-      category: 'behavior_mismatch' as FindingCategory,
-      severity: 'high' as SeverityLevel,
-      title: 'Network listener',
-      description: 'The skill sets up network listeners which may indicate unexpected behavior.'
-    }
-  ]
-
-  // Check each line for patterns
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (!line) continue
-
-    for (const pattern of patterns) {
-      if (pattern.regex.test(line)) {
-        findings.push({
-          scan_id: scanId,
-          skill_id: skillId,
-          category: pattern.category,
-          severity: pattern.severity,
-          title: pattern.title,
-          description: pattern.description,
-          line_number: i + 1,
-          code_snippet: line.length > 100 ? line.substring(0, 100) + '...' : line,
-          confidence: 0.9 // High confidence for exact pattern matches
-        })
-      }
-    }
-  }
-
-  return findings
 }
 
 export async function GET() {
