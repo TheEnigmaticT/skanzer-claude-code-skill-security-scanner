@@ -4809,3 +4809,1762 @@ Applied edit to app/login/page.tsx
 Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
 Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
 summarizer unexpectedly failed for all models
+[19:53:54]   Auth pages done
+[19:53:54]   Step 3d: Building pages and routes...
+[19:53:54]   [1/10] Building app/dashboard/page.tsx...
+[19:53:54]   [aider] Starting task...
+/Users/ct-mac-mini/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Warning: Input is not a terminal (fd=0).
+
+Warning for openai/botty-step-flash: Unknown context window size and costs, 
+using sane defaults.
+You can skip this check with --no-show-model-warnings
+
+https://aider.chat/docs/llms/warnings.html
+
+Creating empty file 
+/Users/ct-mac-mini/dev/skanzer-claude-code-skill-security-scanner-upload-/app/da
+shboard/page.tsx
+Aider v0.82.3
+Model: openai/botty-step-flash with whole edit format
+Git repo: .git with 27 files
+Repo-map: using 1024 tokens, auto refresh
+Added app/dashboard/page.tsx to the chat.
+Added lib/supabase/client.ts to the chat (read-only).
+Added lib/supabase/server.ts to the chat (read-only).
+Added lib/types.ts to the chat (read-only).
+Added app/nav.tsx to the chat (read-only).
+
+
+--------------
+► **THINKING**
+
+The user wants me to build the app/dashboard/page.tsx file. Let me analyze the requirements:
+
+1. Purpose: Security dashboard with severity ratings and safe/unsafe skill counts
+2. App: "Skanzer - Claude Code skill security scanner"
+3. Requirements:
+   - Fetch real data from Supabase using .from('table').select()
+   - Use types from lib/types.ts
+   - Style with Tailwind CSS — professional look, not generic/templated
+   - Include loading and error states
+   - If this page has a form, implement real submission with .insert() or .update()
+   - Use either server component or client component
+   - Make it fully functional, not a placeholder
+
+From the provided files, I can see:
+- lib/types.ts has types: Skill, Scan, Finding, ScanWithDetails, DashboardStats
+- The app is about scanning skills for security issues
+- The dashboard should show:
+  - Severity ratings
+  - Safe/unsafe skill counts
+  - Scan results with detailed findings
+
+I need to decide whether to use a server component or client component. Since this is a dashboard that likely needs to fetch data and display it, a server component would be simpler and more performant. However, if there's any interactivity needed (like filtering, sorting, etc.), a client component might be better. The requirements don't specify interactivity, so I'll go with a server component for simplicity and better performance.
+
+Let me design the dashboard:
+
+1. Fetch data from Supabase:
+   - Get all skills
+   - Get all scans (maybe with details)
+   - Calculate stats: total skills, total scans, safe skills, unsafe skills, findings by severity, findings by category
+   - Or maybe there's a DashboardStats type that we need to compute
+
+2. Display:
+   - Header with app name
+   - Stats cards showing:
+     - Total Skills
+     - Total Scans
+     - Safe Skills
+     - Unsafe Skills
+   - Findings breakdown by severity (maybe a chart or list)
+   - Findings breakdown by category
+   - Recent scans table/list with details
+
+3. Styling: Use Tailwind CSS with a professional look. I'll use a clean design with cards, proper spacing, and a color scheme that fits a security tool (maybe blues, greens for safe, reds for critical).
+
+4. Loading and error states: Use Suspense or try/catch for server component.
+
+Let me check the types again:
+
+```typescript
+export interface DashboardStats {
+  totalSkills: number
+  totalScans: number
+  safeSkills: number
+  unsafeSkills: number
+  findingsBySeverity: Record<SeverityLevel, number>
+  findingsByCategory: Record<FindingCategory, number>
+}
+```
+
+So we need to compute these stats. We'll need to query:
+- Skills table: count all skills
+- Scans table: count all scans, and also count scans that are completed and have findings? Actually "safeSkills" and "unsafeSkills" likely refer to skills that have been scanned and are considered safe or unsafe based on findings. We need to define what makes a skill safe vs unsafe. Probably if any finding has severity 'high' or 'critical', it's unsafe. Or maybe if there are any findings at all? The requirement says "safe/unsafe skill counts", so we need to determine that.
+
+Looking at the Finding type, it has severity levels: low, medium, high, critical. So maybe:
+- Safe: no findings OR only low/medium findings? Or maybe the business logic is that if there are any high/critical findings, it's unsafe. I'll assume that if a skill has any finding with severity 'high' or 'critical', it's considered unsafe. Otherwise safe. But we need to check the actual data.
+
+Alternatively, maybe the Scan status indicates if it's safe or not? The ScanStatus includes 'completed', 'failed', etc. But not safe/unsafe. So we need to derive from findings.
+
+Let's think: The DashboardStats type has safeSkills and unsafeSkills. So we need to compute these numbers. We can:
+- Get all skills
+- For each skill, get its latest scan (or all scans?) and check if there are any findings with high/critical severity. But that could be heavy. Better to compute in a single query using joins and aggregations.
+
+Supabase doesn't support complex aggregations easily, but we can do multiple queries or use raw SQL. Since this is a dashboard, performance might be okay with multiple queries.
+
+Simpler approach:
+1. Count total skills: SELECT COUNT(*) FROM skills
+2. Count total scans: SELECT COUNT(*) FROM scans
+3. Count safe skills: skills that have no findings OR only low/medium findings? Actually we need to define. Let's assume: a skill is safe if its latest completed scan has no findings OR all findings are low/medium. But we don't have a "latest scan" concept. We could get the most recent scan per skill. That's complex.
+
+Maybe the intended meaning is simpler: safeSkills = number of skills that have been scanned and have no findings? Or maybe it's based on the scan status? The requirement says "safe/unsafe skill counts". In security scanning, a skill is often considered safe if no vulnerabilities are found, and unsafe if any are found. But severity matters? Possibly they want to count skills that have any high/critical findings as unsafe, and others as safe. But the type doesn't have a field for that.
+
+Let's look at the ScanWithDetails type: it includes skill and findings. So maybe we need to fetch all scans with findings and then compute.
+
+Given the ambiguity, I'll make reasonable assumptions:
+- safeSkills: number of skills that have at least one completed scan with no findings OR all findings are low/medium? Actually I think it's simpler: safeSkills = number of skills that have been scanned and have no findings (i.e., clean). But that might be too strict. Alternatively, maybe they want to count skills that are "safe" meaning they passed the scan (no issues) vs "unsafe" meaning they have issues. I'll go with: safeSkills = count of skills where the latest scan (by started_at) has no findings. UnsafeSkills = count of skills where the latest scan has at least one finding. But we need to define "latest scan". We can get the max started_at per skill.
+
+But this is getting complex. Maybe the DashboardStats is meant to be computed on the backend and stored? But the requirement says "Fetch real data from Supabase", so we need to compute it from tables.
+
+Let's check the tables from the migration: supabase/migrations/001_initial_schema.sql. That file is read-only but we can look at its content if needed. However, the user said they added these files to the chat, but I don't see the content of that migration file in the chat. Actually the user said "Here are summaries of some files present in my git repository." and then listed files including supabase/migrations/001_initial_schema.sql but didn't provide its content. Then they said "I have *added these files to the chat* so you can go ahead and edit them." But they only added app/dashboard/page.tsx (which was empty). So I don't have the schema. But I can infer from the types.
+
+Given the types, we have tables: skills, scans, findings. Relationships:
+- Scan has skill_id (foreign key to skills)
+- Finding has scan_id (foreign key to scans) and skill_id (redundant but maybe for convenience)
+
+So to compute DashboardStats:
+- totalSkills: count of skills
+- totalScans: count of scans
+- safeSkills: count of skills that have at least one scan with status 'completed' and that scan has no findings? Or maybe skills that have no findings across all scans? I think it's per skill: if any scan for that skill has findings, it's considered unsafe? But that would be too strict because a skill might have been fixed. So we should consider the latest scan.
+
+I'll define:
+- For each skill, get its latest scan (by started_at) that is completed. If that scan has no findings, the skill is safe. If it has any findings, it's unsafe. If there is no completed scan, maybe it's not counted? Or maybe it's considered safe? I'd say not counted in safe/unsafe until scanned.
+
+But the DashboardStats type doesn't have a field for unscanned skills. So maybe safeSkills + unsafeSkills = totalSkills? That would imply all skills are either safe or unsafe. That suggests that every skill must have been scanned at least once. But that's not realistic. So maybe safeSkills and unsafeSkills are counts of skills based on their latest scan status, and skills without scans are not included? But then totalSkills would be larger. The type doesn't specify that they sum to totalSkills. So it's okay if they don't.
+
+Given the ambiguity, I'll compute:
+- totalSkills: all skills
+- totalScans: all scans
+- safeSkills: count of skills where the latest completed scan has no findings
+- unsafeSkills: count of skills where the latest completed scan has at least one finding
+- findingsBySeverity: count of findings across all scans, grouped by severity
+- findingsByCategory: count of findings across all scans, grouped by category
+
+This seems reasonable.
+
+Implementation plan for server component:
+
+1. Import createClient from '@/lib/supabase/server'
+2. Use async function to fetch data.
+3. Use try/catch for error handling.
+4. Compute stats as described.
+5. Render UI with Tailwind.
+
+I'll need to write SQL queries or multiple queries. Since Supabase client is PostgREST, we can do:
+- For totalSkills: supabase.from('skills').select('*', { count: 'exact', head: true })
+- For totalScans: supabase.from('scans').select('*', { count: 'exact', head: true })
+- For safeSkills and unsafeSkills: we need to get latest scan per skill with findings. This is tricky with PostgREST. We could:
+   a) Get all skills with their latest scan (using a subquery or RPC). But PostgREST doesn't support window functions easily. We could use a view or a function. But we don't have that.
+   b) Do multiple queries: get all skills, then for each skill get its latest scan? That would be N+1 queries, not good.
+   c) Use a raw SQL query via supabase.rpc? But we don't have an RPC function defined.
+   d) Alternatively, we can fetch all scans with skill and findings, then process in memory. But if there are many scans, that could be heavy. But for a dashboard, it might be okay if data is not huge.
+
+Given the constraints, I'll do:
+- Fetch all skills (maybe just id)
+- Fetch all scans with skill_id, status, started_at, and also fetch findings for each scan? That would be two queries: scans and findings, then join in memory.
+But we need to know for each skill its latest completed scan. So:
+   - Fetch all scans where status = 'completed', ordered by skill_id, started_at DESC. Then group by skill_id and take the first for each skill. That can be done in memory after fetching all completed scans.
+   - Then for each of those latest scans, check if they have any findings. But we need to know findings for those scans. So we can fetch all findings for those scan ids.
+
+Steps:
+1. Fetch all skills (just id) to get totalSkills.
+2. Fetch all scans (just count) for totalScans.
+3. Fetch all completed scans with skill_id, id, started_at. Then in memory, for each skill, find the scan with max started_at.
+4. Get the set of latest scan ids.
+5. Fetch all findings for those scan ids.
+6. For each latest scan, check if it has any findings. If yes, the skill is unsafe; if no, safe.
+7. Count findings by severity and category from all findings (or maybe only from latest scans? The requirement says "findings by severity" and "findings by category" - likely overall, not just latest. I'll do overall from all findings.
+
+But we also need to fetch findings for the severity/category counts. We can fetch all findings (or at least count by severity/category using aggregate queries). But PostgREST doesn't support group by easily without using select with count and grouping? Actually we can use .select('severity, category') and then group in memory, or we can use multiple count queries: one for each severity and category? That would be many queries.
+
+Better: fetch all findings (maybe just severity and category) and aggregate in memory. If there are many findings, this could be heavy. But for a dashboard, it's probably okay.
+
+Alternatively, we can use supabase.from('findings').select('severity, category') and then process. But that returns all rows. If there are thousands, it's not efficient. But we can use .select('severity') and then group? Actually we can do:
+   const { data: findings } = await supabase.from('findings').select('severity, category')
+Then in memory, reduce to counts.
+
+Given that this is a demo or small app, I'll assume data size is manageable.
+
+So overall queries:
+- skills: select('id') -> count
+- scans: select('id') -> count
+- completed_scans: select('skill_id, id, started_at').eq('status', 'completed').order('started_at', { ascending: false }) -> then group by skill_id
+- findings_for_latest_scans: select('scan_id, severity, category').in('scan_id', latest_scan_ids)
+- all_findings: maybe we already have findings_for_latest_scans, but we need all findings for the severity/category counts? The requirement says "findings by severity" and "findings by category". It doesn't specify if it's only from latest scans or all scans. I think it's overall, so we need all findings. But we can fetch all findings separately, or we can fetch all findings in one go and use that for both latest scan check and counts. But we need to know which findings belong to which scan. So we can fetch all findings with scan_id, severity, category. Then we can:
+   - For each latest scan, check if any finding has that scan_id.
+   - For counts, aggregate all findings.
+
+So we can do one query: fetch all findings (scan_id, severity, category). That might be large but okay.
+
+Alternatively, we can do two queries: one for findings of latest scans, and one for all findings counts using aggregate? But PostgREST doesn't support group by in the same way. We could use .select('severity') and then count in memory. So I'll fetch all findings.
+
+Plan:
+1. Fetch all skills (ids) -> totalSkills = skills.length
+2. Fetch all scans (ids) -> totalScans = scans.length
+3. Fetch all completed scans (id, skill_id, started_at) -> array
+4. From completed scans, group by skill_id, pick the one with max started_at for each skill -> latestScansBySkill (map skill_id -> scan)
+5. Get latest scan ids: Object.values(latestScansBySkill).map(s => s.id)
+6. Fetch all findings (scan_id, severity, category) -> array
+7. Group findings by scan_id: findingsByScanId (map scan_id -> array of findings)
+8. For each skill in latestScansBySkill:
+   - let scan = latestScansBySkill[skill_id]
+   - let findings = findingsByScanId[scan.id] || []
+   - if findings.length > 0 -> unsafeSkills++ else safeSkills++
+9. For all findings (the array from step 6), compute:
+   - findingsBySeverity: count per severity level
+   - findingsByCategory: count per category
+
+But note: step 6 fetches all findings, not just for latest scans. That's fine for overall counts.
+
+But step 6 might be huge. We could instead fetch only the counts using separate count queries for each severity and category. But that would be many queries (4 severities + 4 categories = 8 queries). That's okay. But we also need to know for each latest scan if it has findings. For that we need to know which findings belong to those scans. So we need to fetch findings for those scan ids anyway. So we can fetch findings only for the latest scans, and then for overall counts we can fetch aggregated counts using separate count queries. That would be more efficient.
+
+Let's do:
+- Fetch all findings for the latest scan ids: .select('severity, category').in('scan_id', latest_scan_ids)
+   This gives us findings for latest scans only. We can use that to determine safe/unsafe per skill.
+- For overall counts, we can do separate count queries:
+   For each severity in ['low','medium','high','critical']: supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', severity)
+   Similarly for each category.
+
+That would be 1 (findings for latest scans) + 4 (severity counts) + 4 (category counts) = 9 queries plus the earlier ones. That's okay.
+
+But we also need to fetch all findings for the latest scans to know per skill. That's one query with an IN clause. The number of latest scans could be up to totalSkills, which might be large. But we can handle it.
+
+Alternatively, we can do a single query that gets the latest scan per skill with a subquery using Postgres window functions via RPC. But we don't have an RPC function. So I'll stick with the multiple query approach.
+
+Given that this is a dashboard and likely not huge, I'll keep it simple and fetch all findings (maybe with limit?) but better to be efficient.
+
+I'll implement as:
+- totalSkills: count from skills
+- totalScans: count from scans
+- Get latest completed scans per skill: 
+   const { data: completedScans } = await supabase
+     .from('scans')
+     .select('id, skill_id, started_at')
+     .eq('status', 'completed')
+     .order('started_at', { ascending: false })
+   Then in JS: group by skill_id, take first per group.
+- Get findings for those scan ids: 
+   const latestScanIds = Object.values(latestScansBySkill).map(s => s.id)
+   const { data: latestFindings } = await supabase
+     .from('findings')
+     .select('scan_id, severity, category')
+     .in('scan_id', latestScanIds)
+   Then group by scan_id.
+- Compute safeSkills and unsafeSkills by iterating over latestScansBySkill.
+- For overall counts:
+   const { count: lowCount } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', 'low')
+   similarly for medium, high, critical.
+   For categories: data_exfiltration, behavior_mismatch, privilege_escalation, other.
+
+But note: the category type includes 'other'. So we need to count for each.
+
+We'll need to handle errors and loading state. Since it's a server component, we can use async/await and render directly. But we should handle errors with try/catch and show an error message.
+
+Also, we need to style with Tailwind. I'll design a dashboard with:
+- A header with "Skanzer Dashboard"
+- Stats grid: 4 cards (Total Skills, Total Scans, Safe Skills, Unsafe Skills)
+- Two sections: Findings by Severity and Findings by Category, maybe as horizontal bars or pie charts? I'll use simple bar charts with Tailwind.
+- Recent Scans table: maybe show the latest scans with their status, skill name, number of findings, etc. But the requirement says "Dashboard shows scan results with severity ratings, detailed findings, and safe/unsafe skill counts." So we need to show detailed findings? Possibly a table of findings? But that could be many. Maybe show recent findings or a list. I'll include a section "Recent Findings" that lists the latest findings across all scans, with severity, category, title, etc. But we don't have the findings data for all scans, only for latest scans? We could fetch recent findings separately.
+
+But the requirement says "scan results with severity ratings, detailed findings". So we need to display findings. I'll add a table of findings, maybe paginated? But for simplicity, I'll show the most recent 10 findings across all scans. To do that, we need to fetch findings with scan and skill info, ordered by created_at DESC. That would be another query.
+
+Let's think about the data we need for the findings table:
+- Finding: id, title, severity, category, description, line_number?, code_snippet?, confidence?, created_at
+- Also we want to show skill name and maybe scan status? But the finding belongs to a scan, which belongs to a skill. So we need to join. We can fetch findings with skill by using a foreign table relationship? Supabase doesn't support joins in the same query unless we use select with foreign tables? Actually Supabase supports selecting from related tables using the `select` method with a nested query? I think you can do .select('skill:skill_id (name)') if there's a foreign key relationship defined. But we don't know if the schema has that. The types show that Finding has skill_id and scan_id. So we can do:
+   supabase.from('findings').select('id, title, severity, category, description, created_at, skill:skill_id (name)').order('created_at', { ascending: false }).limit(10)
+But that requires that the skill_id column has a foreign key to skills table and that we've set up the relationship in Supabase. Usually you can do that. But we don't know if it's set up. The migration might have set up foreign keys. I'll assume it's set up.
+
+Alternatively, we can fetch findings and then separately fetch skills for those skill_ids. But that's more queries.
+
+Given the time, I'll keep it simple: show a table of findings with skill name, severity, category, title, and date. I'll fetch findings with skill name using a join if possible. If not, I'll fetch findings and then map skill_ids to names by fetching skills separately. But that's extra queries.
+
+I'll try to use a join: .select('id, title, severity, category, description, created_at, skill:skill_id (name)') . This will return an object with a skill property containing { name }. That's convenient.
+
+But we need to ensure the foreign key relationship is defined. Since we don't have the schema, I'll assume it's defined. If not, the query will fail. But the user said to use real data, so we must query correctly. I'll check the types: Finding has skill_id: string. So it's a foreign key to skills.id. So it's likely defined.
+
+I'll also need to fetch the scan status? Not necessary for findings table.
+
+Now, for the stats, we need safeSkills and unsafeSkills. We computed that from latest scans. But we also need to show the counts. That's fine.
+
+Now, let's structure the component:
+
+- It's a server component, so no 'use client'.
+- We'll have an async function that fetches all data.
+- We'll use a default export function DashboardPage() that is async.
+- Inside, we'll try to fetch data, catch errors.
+- We'll compute stats.
+- We'll render.
+
+I'll use a layout with a container, header, stats grid, and sections.
+
+Tailwind classes: I'll use a clean design with white background, gray text, blue accents. Use grid for stats: grid-cols-1 md:grid-cols-2 lg:grid-cols-4.
+
+For severity bars: I'll show a horizontal bar for each severity with count and percentage. Colors: low: green, medium: yellow, high: orange, critical: red.
+
+For category: similar.
+
+For findings table: a simple table with headers.
+
+Also, we need to handle loading? Since it's a server component, the page will load with data already fetched, so no loading state needed on the client. But if the fetch fails, we show error.
+
+But the requirement says "Include loading and error states". For a server component, we can't show a loading spinner while fetching because the server is rendering. However, we can use Suspense boundaries? But that's more advanced. Typically, server components render on the server and send HTML, so there's no client-side loading state. But we can show a fallback if using Suspense. But the requirement might be for client components. However, they said "Use either server component or client component". If I use server component, I don't need to handle loading state in the component because the page will wait for data. But if the data fetch is slow, the user will see a loading indicator from Next.js (the streaming skeleton). But we can provide a loading.tsx file. But the requirement is for this page file. So maybe they expect a client component with useState for loading. But they said "Include loading and error states", which is easier with client component. However, server components can also throw errors and we can catch them and render an error message. But loading is not applicable because the server component will not render until data is ready (unless using Suspense). But we can use async component and it will automatically show a loading state from Next.js if we have a loading.tsx. But we are only editing this file. So maybe we should make it a client component to have explicit loading and error states.
+
+Let's re-read: "Use either server component (createClient from lib/supabase/server) or client component ('use client' + createClient from lib/supabase/client)". So we can choose. I'll choose server component for simplicity and better performance. But then how to show loading? Actually, with server components, you can use the `loading`.tsx file to show a loading indicator while the server component is fetching data. But we are not asked to create that file. The requirement says "Include loading and error states" within the page? Possibly they mean handle loading and error states in the component itself, which is typical for client components. But server components can also have error boundaries. However, it's common to have a client component for dashboards that need interactivity. But the requirement doesn't specify interactivity. So I'll go with server component and rely on Next.js's built-in loading and error handling via separate files? But we are only editing this file. So maybe we should make it a client component to have explicit loading and error states within the component.
+
+Given the instruction: "If this page has a form, implement real submission with .insert() or .update()" - this page likely doesn't have a form, it's a dashboard. So no form.
+
+I'll decide: use a client component because it's easier to manage loading and error states within the component, and it's a dashboard that might have client-side interactivity later (like filtering). Also, the nav component is a client component. So consistency might be good.
+
+But the requirement says "Use either server component (createClient from lib/supabase/server) or client component ('use client' + createClient from lib/supabase/client)". So I can choose. I'll choose client component to have explicit loading and error states.
+
+So I'll add 'use client' at top, import createClient from '@/lib/supabase/client', and use useEffect or just use state and fetch on mount? But we want to fetch data on render. In a client component, we can use useEffect to fetch data, but that would cause a flash of loading state. Alternatively, we can use React's async component pattern with useState and useEffect. But we can also use a library like SWR, but not needed.
+
+Simplest: use useState for data, loading, error. Use useEffect to fetch data on mount. But that means the component will render initially with loading true, then fetch, then render data. That's fine.
+
+But we can also use the new React 18 features like useTransition? Not needed.
+
+I'll do:
+
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { DashboardStats, Finding, Skill, Scan } from '@/lib/types' // but we may not need all
+
+But we need to compute DashboardStats from raw data. So we'll fetch raw data and compute.
+
+Alternatively, we could have an API route that returns the computed stats, but the requirement says fetch real data from Supabase directly from the page. So we'll query Supabase from the client.
+
+But querying from client means we need to handle auth? The user might be logged in. The supabase client will use the user's session. That's fine.
+
+So I'll implement a client component.
+
+Steps in component:
+- State: stats (DashboardStats | null), recentFindings (Finding[] | null), loading (boolean), error (string | null)
+- useEffect: 
+   const supabase = createClient()
+   try {
+      // fetch all data
+      // compute stats
+      setStats(computedStats)
+      setRecentFindings(recentFindings)
+   } catch (err) {
+      setError(err.message)
+   } finally {
+      setLoading(false)
+   }
+
+But we need to fetch:
+- skills: supabase.from('skills').select('id')
+- scans: supabase.from('scans').select('id, skill_id, status, started_at')
+- findings: supabase.from('findings').select('scan_id, severity, category, title, description, created_at, skill:skill_id (name)')? Actually for recent findings we want skill name. So we can fetch with join.
+
+But for stats, we need all findings to compute counts by severity and category. So we can fetch all findings (maybe just severity and category) and also fetch recent findings with more details. That's two queries for findings. But we can fetch all findings with all columns and then use that for both. But that might be a lot of data. But we can limit recent findings to 10, and for stats we only need counts, so we can fetch counts separately. I'll do:
+
+1. Fetch total skills count: supabase.from('skills').select('*', { count: 'exact', head: true })
+2. Fetch total scans count: supabase.from('scans').select('*', { count: 'exact', head: true })
+3. Fetch completed scans: supabase.from('scans').select('id, skill_id, started_at').eq('status', 'completed')
+4. Fetch findings for those completed scans: supabase.from('findings').select('scan_id, severity, category').in('scan_id', completedScanIds)
+5. Compute safe/unsafe from that.
+6. For overall counts: we can fetch all findings with severity and category? But we already have findings for completed scans only. But we want overall counts across all scans, not just completed? The requirement says "findings by severity" and "findings by category". It doesn't specify only completed scans. So we should include all findings. So we need to fetch all findings (severity, category) separately. Or we can fetch all findings without filtering. But that could be large. We can do count queries per severity and category as I thought earlier. That's more efficient.
+
+So:
+- For each severity: supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', severity)
+- For each category: supabase.from('findings').select('*', { count: 'exact', head: true }).eq('category', category)
+
+That's 8 queries plus the others. That's okay.
+
+7. For recent findings: supabase.from('findings').select('id, title, severity, category, description, created_at, skill:skill_id (name)').order('created_at', { ascending: false }).limit(10)
+
+But note: the join for skill name: we need to ensure the relationship is defined. I'll assume it is.
+
+Now, compute safeSkills and unsafeSkills:
+- From completed scans, group by skill_id, pick the one with max started_at.
+- For each latest scan, check if there is any finding in the findingsForCompletedScans array with that scan_id. If yes, unsafe; else safe.
+
+But careful: findingsForCompletedScans only includes findings for completed scans. That's fine because we only consider completed scans for safety determination.
+
+Now, implement.
+
+I'll write the component with proper error handling and loading.
+
+Also, style with Tailwind. I'll use a clean dashboard layout.
+
+Let's draft the JSX:
+
+<div className="min-h-screen bg-gray-50">
+  <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <h1 className="text-3xl font-bold text-gray-900 mb-8">Skanzer Dashboard</h1>
+
+    {loading && <div>Loading...</div>}
+    {error && <div className="text-red-600">Error: {error}</div>}
+
+    {!loading && !error && stats && (
+      <>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <StatCard title="Total Skills" value={stats.totalSkills} />
+          <StatCard title="Total Scans" value={stats.totalScans} />
+          <StatCard title="Safe Skills" value={stats.safeSkills} color="green" />
+          <StatCard title="Unsafe Skills" value={stats.unsafeSkills} color="red" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 mb-8">
+          {/* Findings by Severity */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Severity</h2>
+            <div className="space-y-4">
+              {(['low','medium','high','critical'] as SeverityLevel[]).map(severity => {
+                const count = stats.findingsBySeverity[severity] || 0
+                const total = Object.values(stats.findingsBySeverity).reduce((a,b)=>a+b,0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                const colorMap = { low: 'bg-green-500', medium: 'bg-yellow-500', high: 'bg-orange-500', critical: 'bg-red-500' }
+                return (
+                  <div key={severity}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{severity}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className={`${colorMap[severity]} h-2.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Findings by Category */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Category</h2>
+            <div className="space-y-4">
+              {(['data_exfiltration','behavior_mismatch','privilege_escalation','other'] as FindingCategory[]).map(category => {
+                const count = stats.findingsByCategory[category] || 0
+                const total = Object.values(stats.findingsByCategory).reduce((a,b)=>a+b,0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                const color = 'bg-blue-500' // same color for all categories? Or different? I'll use same.
+                return (
+                  <div key={category}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{category.replace('_',' ')}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className={`${color} h-2.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Findings Table */}
+        <div className="bg-white shadow rounded-lg overflow-hidden mb-8">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-medium text-gray-900">Recent Findings</h2>
+          </div>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skill</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {recentFindings && recentFindings.length > 0 ? (
+                recentFindings.map(finding => (
+                  <tr key={finding.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{finding.skill?.name || 'N/A'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{finding.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getSeverityColor(finding.severity)}`}>
+                        {finding.severity}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{finding.category.replace('_',' ')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(finding.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No findings found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    )}
+  </main>
+</div>
+
+We need a helper function getSeverityColor to return Tailwind classes for severity badges.
+
+I'll define:
+
+function getSeverityColor(severity: SeverityLevel) {
+  switch(severity) {
+    case 'low': return 'bg-green-100 text-green-800'
+    case 'medium': return 'bg-yellow-100 text-yellow-800'
+    case 'high': return 'bg-orange-100 text-orange-800'
+    case 'critical': return 'bg-red-100 text-red-800'
+    default: return 'bg-gray-100 text-gray-800'
+  }
+}
+
+Also, StatCard component:
+
+function StatCard({ title, value, color = 'blue' }) {
+  const colorClasses = {
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    red: 'bg-red-500',
+    yellow: 'bg-yellow-500',
+    default: 'bg-gray-500'
+  }
+  return (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="px-4 py-5 sm:p-6">
+        <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
+        <dd className="mt-1 text-3xl font-semibold text-gray-900">{value}</dd>
+      </div>
+      <div className={`${colorClasses[color] || colorClasses.default} h-1`}></div>
+    </div>
+  )
+}
+
+But we can simplify: just a card with value.
+
+Now, the data fetching logic in useEffect:
+
+useEffect(() => {
+  const fetchData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const supabase = createClient()
+
+      // Fetch total counts
+      const [{ count: totalSkills }, { count: totalScans }] = await Promise.all([
+        supabase.from('skills').select('*', { count: 'exact', head: true }),
+        supabase.from('scans').select('*', { count: 'exact', head: true })
+      ])
+
+      // Fetch completed scans
+      const { data: completedScans, error: scansError } = await supabase
+        .from('scans')
+        .select('id, skill_id, started_at')
+        .eq('status', 'completed')
+        .order('started_at', { ascending: false })
+
+      if (scansError) throw scansError
+
+      // Group completed scans by skill_id and get the latest per skill
+      const latestScansBySkill: Record<string, any> = {}
+      completedScans?.forEach(scan => {
+        const skillId = scan.skill_id
+        if (!latestScansBySkill[skillId] || new Date(scan.started_at) > new Date(latestScansBySkill[skillId].started_at)) {
+          latestScansBySkill[skillId] = scan
+        }
+      })
+      const latestScanIds = Object.values(latestScansBySkill).map((s: any) => s.id)
+
+      // Fetch findings for those latest scans
+      const { data: latestFindings, error: findingsError } = await supabase
+        .from('findings')
+        .select('scan_id, severity, category')
+        .in('scan_id', latestScanIds)
+
+      if (findingsError) throw findingsError
+
+      // Group findings by scan_id
+      const findingsByScanId: Record<string, any[]> = {}
+      latestFindings?.forEach(finding => {
+        if (!findingsByScanId[finding.scan_id]) {
+          findingsByScanId[finding.scan_id] = []
+        }
+        findingsByScanId[finding.scan_id].push(finding)
+      })
+
+      // Compute safe and unsafe skills
+      let safeSkills = 0
+      let unsafeSkills = 0
+      Object.values(latestScansBySkill).forEach((scan: any) => {
+        const scanFindings = findingsByScanId[scan.id] || []
+        if (scanFindings.length > 0) {
+          unsafeSkills++
+        } else {
+          safeSkills++
+        }
+      })
+
+      // Fetch overall findings counts by severity and category
+      const severities: Array<'low'|'medium'|'high'|'critical'> = ['low','medium','high','critical']
+      const categories: Array<'data_exfiltration'|'behavior_mismatch'|'privilege_escalation'|'other'> = ['data_exfiltration','behavior_mismatch','privilege_escalation','other']
+
+      const severityCounts: Record<SeverityLevel, number> = {} as any
+      const categoryCounts: Record<FindingCategory, number> = {} as any
+
+      // For each severity, get count
+      await Promise.all(severities.map(async severity => {
+        const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', severity)
+        severityCounts[severity] = count || 0
+      }))
+
+      await Promise.all(categories.map(async category => {
+        const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('category', category)
+        categoryCounts[category] = count || 0
+      }))
+
+      // Fetch recent findings with skill name
+      const { data: recentFindings, error: recentFindingsError } = await supabase
+        .from('findings')
+        .select('id, title, severity, category, description, created_at, skill:skill_id (name)')
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (recentFindingsError) throw recentFindingsError
+
+      setStats({
+        totalSkills: totalSkills || 0,
+        totalScans: totalScans || 0,
+        safeSkills,
+        unsafeSkills,
+        findingsBySeverity: severityCounts,
+        findingsByCategory: categoryCounts
+      })
+      setRecentFindings(recentFindings || [])
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  fetchData()
+}, [])
+
+But we need to define types for state. I'll import DashboardStats and Finding from lib/types.
+
+But note: DashboardStats expects findingsBySeverity and findingsByCategory as records. We are building those.
+
+Also, we need to handle the case where totalSkills or totalScans might be null if no rows. We'll default to 0.
+
+Now, the component will be a client component. We'll add 'use client' at top.
+
+But we also need to import React? In Next.js with React 18, we don't need to import React explicitly for JSX? Actually we do need to import React if we use JSX? In Next.js 13+ with the new app router, you don't need to import React for JSX because it's automatically imported? I think you still need to import React if you use 'use client'? Actually, with the new JSX transform, you don't need to import React. But it's safe to import. I'll not import React unless needed. But we are using useEffect and useState, so we need to import them.
+
+I'll structure the file:
+
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { DashboardStats, Finding, SeverityLevel, FindingCategory } from '@/lib/types'
+
+// Then define component.
+
+But we also need to define the StatCard and getSeverityColor functions inside the component or outside. I'll define them outside to avoid redefinitions.
+
+Now, one more thing: The supabase client from '@/lib/supabase/client' is for browser. That's fine.
+
+Now, let's write the full file.
+
+But wait: The user said "Build the page: app/dashboard/page.tsx". The file currently is empty (just ```). So we need to provide the entire content.
+
+I'll produce the file content.
+
+But before finalizing, let's consider if there are any issues:
+
+- The grouping of completed scans: we are fetching all completed scans and then grouping in memory. That's fine.
+- The latest scan per skill: we are using started_at to determine latest. That's reasonable.
+- For safe/unsafe, we consider only completed scans. If a skill has no completed scan, it won't be counted in safe or unsafe. That's okay because the stats might not sum to totalSkills. That's fine.
+- For overall findings counts, we are counting all findings regardless of scan status. That's okay.
+- For recent findings, we are joining with skill name. That requires the foreign key relationship. If it fails, we might get an error. We can handle by not joining and just show skill_id? But better to join. I'll assume it works.
+
+Potential performance: We are making many queries. But for a dashboard, it's acceptable.
+
+Now, styling: I'll use Tailwind classes as above. I'll make it look professional.
+
+I'll also add a refresh button? Not required.
+
+Now, let's write the code.
+
+But note: The user said "If this page has a form, implement real submission". This page doesn't have a form, so fine.
+
+Now, I'll produce the file listing.
+
+One more thing: The component should be default export.
+
+I'll write:
+
+app/dashboard/page.tsx
+```
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { DashboardStats, Finding, SeverityLevel, FindingCategory } from '@/lib/types'
+
+function getSeverityColor(severity: SeverityLevel) {
+  switch (severity) {
+    case 'low':
+      return 'bg-green-100 text-green-800'
+    case 'medium':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'high':
+      return 'bg-orange-100 text-orange-800'
+    case 'critical':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
+function StatCard({ title, value, color = 'blue' }: { title: string; value: number; color?: string }) {
+  const colorClasses: Record<string, string> = {
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    red: 'bg-red-500',
+    yellow: 'bg-yellow-500',
+    default: 'bg-gray-500'
+  }
+  return (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="px-4 py-5 sm:p-6">
+        <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
+        <dd className="mt-1 text-3xl font-semibold text-gray-900">{value}</dd>
+      </div>
+      <div className={`${colorClasses[color] || colorClasses.default} h-1`}></div>
+    </div>
+  )
+}
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentFindings, setRecentFindings] = useState<Finding[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const supabase = createClient()
+
+        // Fetch total counts for skills and scans
+        const [{ count: totalSkills = 0 }, { count: totalScans = 0 }] = await Promise.all([
+          supabase.from('skills').select('*', { count: 'exact', head: true }),
+          supabase.from('scans').select('*', { count: 'exact', head: true })
+        ])
+
+        // Fetch all completed scans
+        const { data: completedScans, error: scansError } = await supabase
+          .from('scans')
+          .select('id, skill_id, started_at')
+          .eq('status', 'completed')
+          .order('started_at', { ascending: false })
+
+        if (scansError) throw scansError
+
+        // Group completed scans by skill_id and get the latest per skill
+        const latestScansBySkill: Record<string, { id: string; started_at: string }> = {}
+        completedScans?.forEach(scan => {
+          const skillId = scan.skill_id
+          if (!latestScansBySkill[skillId] || new Date(scan.started_at) > new Date(latestScansBySkill[skillId].started_at)) {
+            latestScansBySkill[skillId] = { id: scan.id, started_at: scan.started_at }
+          }
+        })
+        const latestScanIds = Object.values(latestScansBySkill).map(s => s.id)
+
+        // Fetch findings for those latest scans
+        const { data: latestFindings, error: findingsError } = await supabase
+          .from('findings')
+          .select('scan_id, severity, category')
+          .in('scan_id', latestScanIds)
+
+        if (findingsError) throw findingsError
+
+        // Group findings by scan_id
+        const findingsByScanId: Record<string, { severity: SeverityLevel; category: FindingCategory }[]> = {}
+        latestFindings?.forEach(finding => {
+          if (!findingsByScanId[finding.scan_id]) {
+            findingsByScanId[finding.scan_id] = []
+          }
+          findingsByScanId[finding.scan_id].push(finding)
+        })
+
+        // Compute safe and unsafe skills based on whether latest scan has any findings
+        let safeSkills = 0
+        let unsafeSkills = 0
+        Object.values(latestScansBySkill).forEach(scan => {
+          const scanFindings = findingsByScanId[scan.id] || []
+          if (scanFindings.length > 0) {
+            unsafeSkills++
+          } else {
+            safeSkills++
+          }
+        })
+
+        // Fetch overall findings counts by severity
+        const severities: Array<SeverityLevel> = ['low', 'medium', 'high', 'critical']
+        const categories: Array<FindingCategory> = ['data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
+
+        const severityCounts: Record<SeverityLevel, number> = {} as any
+        const categoryCounts: Record<FindingCategory, number> = {} as any
+
+        await Promise.all(
+          severities.map(async severity => {
+            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', severity)
+            severityCounts[severity] = count || 0
+          })
+        )
+
+        await Promise.all(
+          categories.map(async category => {
+            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('category', category)
+            categoryCounts[category] = count || 0
+          })
+        )
+
+        // Fetch recent findings with skill name
+        const { data: recentFindingsData, error: recentFindingsError } = await supabase
+          .from('findings')
+          .select('id, title, severity, category, description, created_at, skill:skill_id (name)')
+          .order('created_at', { ascending: false })
+          .limit(10)
+
+        if (recentFindingsError) throw recentFindingsError
+
+        setStats({
+          totalSkills,
+          totalScans,
+          safeSkills,
+          unsafeSkills,
+          findingsBySeverity: severityCounts,
+          findingsByCategory: categoryCounts
+        })
+        setRecentFindings(recentFindingsData || [])
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 text-lg">Error loading dashboard: {error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-600">No data available.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Skanzer Dashboard</h1>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <StatCard title="Total Skills" value={stats.totalSkills} color="blue" />
+          <StatCard title="Total Scans" value={stats.totalScans} color="blue" />
+          <StatCard title="Safe Skills" value={stats.safeSkills} color="green" />
+          <StatCard title="Unsafe Skills" value={stats.unsafeSkills} color="red" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 mb-8">
+          {/* Findings by Severity */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Severity</h2>
+            <div className="space-y-4">
+              {severities.map(severity => {
+                const count = stats.findingsBySeverity[severity] || 0
+                const total = Object.values(stats.findingsBySeverity).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                const colorMap: Record<SeverityLevel, string> = {
+                  low: 'bg-green-500',
+                  medium: 'bg-yellow-500',
+                  high: 'bg-orange-500',
+                  critical: 'bg-red-500'
+                }
+                return (
+                  <div key={severity}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{severity}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className={`${colorMap[severity]} h-2.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Findings by Category */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Category</h2>
+            <div className="space-y-4">
+              {categories.map(category => {
+                const count = stats.findingsByCategory[category] || 0
+                const total = Object.values(stats.findingsByCategory).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                return (
+                  <div key={category}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{category.replace('_', ' ')}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Findings Table */}
+        <div className="bg-white shadow rounded-lg overflow-hidden mb-8">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-medium text-gray-900">Recent Findings</h2>
+          </div>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skill</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {recentFindings && recentFindings.length > 0 ? (
+                recentFindings.map(finding => (
+                  <tr key={finding.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{finding.skill?.name || 'N/A'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{finding.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getSeverityColor(finding.severity)}`}>
+                        {finding.severity}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{finding.category.replace('_', ' ')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(finding.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No findings found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  )
+}
+```
+
+But I used `severities` and `categories` arrays inside the render, but they are defined inside the component? Actually I defined them inside the useEffect? No, I need to define them in the component scope for rendering. I can define them as constants outside the component or inside. I'll define them inside the component but outside the JSX.
+
+Let me adjust: In the component, after the state, I'll define:
+
+const severities: Array<SeverityLevel> = ['low', 'medium', 'high', 'critical']
+const categories: Array<FindingCategory> = ['data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
+
+But I already used them in the useEffect for fetching counts. I can define them at the top of the component.
+
+Also, I need to import the types. I already imported.
+
+Now, check for any TypeScript errors: 
+- In the grouping of completed scans, I used `latestScansBySkill: Record<string, { id: string; started_at: string }>`. That's fine.
+- In the findingsByScanId, I used `Record<string, { severity: SeverityLevel; category: FindingCategory }[]>`. That's fine.
+- In the severityCounts and categoryCounts, I used `as any` to bypass type checking because we are assigning dynamically. That's okay.
+- In the recent findings, I used `finding.skill?.name`. The type for Finding from lib/types doesn't have a skill property. But we are selecting with a join, so the returned data will have a skill property. However, the type system doesn't know that. I need to extend the Finding type or use a different type. I can define a local type for recent findings that includes the join. Or I can use `any`. But better to define an interface:
+
+interface FindingWithSkill extends Finding {
+  skill: { name: string }
+}
+
+Then use that for recentFindings state. But the requirement says use types from lib/types. So we should use those types. But the lib/types Finding doesn't include skill. So we have two options:
+1. Modify lib/types.ts to include skill? But that's read-only? The user said those files are read-only and we shouldn't edit them unless asked. So we cannot change lib/types.ts.
+2. Use a different approach: fetch skill name separately or use a different select that doesn't require join. But we want skill name. We could fetch findings and then fetch skill names for the skill_ids. That would be more queries. But we can do: after fetching recent findings, extract skill_ids, then fetch skills for those ids, then map. That would be two queries but manageable.
+
+Given that we cannot change lib/types, we should not assume the join returns a skill property. So we need to handle it differently.
+
+Option: fetch recent findings without skill name, then fetch skills for those skill_ids, then combine.
+
+Let's do:
+
+// Fetch recent findings (without skill name)
+const { data: recentFindingsData, error: recentFindingsError } = await supabase
+  .from('findings')
+  .select('id, title, severity, category, description, created_at, skill_id')
+  .order('created_at', { ascending: false })
+  .limit(10)
+
+Then get unique skill_ids from recentFindingsData, fetch skills:
+
+const skillIds = [...new Set(recentFindingsData.map(f => f.skill_id))]
+const { data: skillsData } = await supabase.from('skills').select('id, name').in('id', skillIds)
+
+Then create a map: skillIdToName = skillsData.reduce((map, skill) => { map[skill.id] = skill.name; return map }, {})
+
+Then map recentFindingsData to include skillName: recentFindingsData.map(f => ({ ...f, skillName: skillIdToName[f.skill_id] }))
+
+But then the type of recentFindings would be an array of objects that have skillName. We can define a local type:
+
+type RecentFinding = Finding & { skillName: string }
+
+But we are using Finding from lib/types, which doesn't have skillName. So we can just use any or define our own. Since we are only using it for display, we can use any. But better to define a local interface.
+
+I'll do:
+
+interface RecentFinding extends Finding {
+  skillName: string
+}
+
+Then setRecentFindings(recentFindings as RecentFinding[])
+
+But we need to adjust the rendering: use finding.skillName instead of finding.skill?.name.
+
+Alternatively, we can keep the state as Finding[] and then when rendering, we look up the skill name from a map. That might be simpler: keep a separate state for skillMap? Or compute the skill names on the fly in render? But we need to have the skill names available. I'll compute a map in the fetch and then set recentFindings as an array of objects that include skillName. But then the type is not exactly Finding. So I'll define a local type.
+
+Given that we are in a client component and we control the code, it's fine.
+
+Let's adjust the fetch:
+
+// After fetching recentFindingsData (which is of type Finding[] but with skill_id)
+const skillIds = recentFindingsData?.map(f => f.skill_id).filter((id, i, arr) => arr.indexOf(id) === i) || []
+const { data: skillsData } = await supabase.from('skills').select('id, name').in('id', skillIds)
+const skillMap = new Map(skillsData?.map(s => [s.id, s.name]) || [])
+const recentFindingsWithSkill: Array<Finding & { skillName: string }> = (recentFindingsData || []).map(f => ({
+  ...f,
+  skillName: skillMap.get(f.skill_id) || 'N/A'
+}))
+
+Then setRecentFindings(recentFindingsWithSkill)
+
+And in the table, use finding.skillName.
+
+But note: the Finding type from lib/types includes skill_id? Actually the Finding interface in lib/types has skill_id: string. Yes, it does. So we can use that.
+
+So we don't need to change the type. We just need to add skillName property. That's okay because we are not modifying the original type, we are creating a new object that extends it.
+
+Now, adjust the code accordingly.
+
+Also, we need to import the Finding type. It already has skill_id.
+
+Now, let's rewrite the recent findings part.
+
+I'll also need to handle the case where skillsData might be null.
+
+Now, the code becomes a bit longer but still fine.
+
+Let's update the file.
+
+Also, I need to define the severities and categories arrays for the charts. I'll define them at the top of the component.
+
+Now, final code:
+
+app/dashboard/page.tsx
+```
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { DashboardStats, Finding, SeverityLevel, FindingCategory } from '@/lib/types'
+
+function getSeverityColor(severity: SeverityLevel) {
+  switch (severity) {
+    case 'low':
+      return 'bg-green-100 text-green-800'
+    case 'medium':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'high':
+      return 'bg-orange-100 text-orange-800'
+    case 'critical':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
+function StatCard({ title, value, color = 'blue' }: { title: string; value: number; color?: string }) {
+  const colorClasses: Record<string, string> = {
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    red: 'bg-red-500',
+    yellow: 'bg-yellow-500',
+    default: 'bg-gray-500'
+  }
+  return (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="px-4 py-5 sm:p-6">
+        <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
+        <dd className="mt-1 text-3xl font-semibold text-gray-900">{value}</dd>
+      </div>
+      <div className={`${colorClasses[color] || colorClasses.default} h-1`}></div>
+    </div>
+  )
+}
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentFindings, setRecentFindings] = useState<Array<Finding & { skillName: string }> | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const severities: Array<SeverityLevel> = ['low', 'medium', 'high', 'critical']
+  const categories: Array<FindingCategory> = ['data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const supabase = createClient()
+
+        // Fetch total counts for skills and scans
+        const [{ count: totalSkills = 0 }, { count: totalScans = 0 }] = await Promise.all([
+          supabase.from('skills').select('*', { count: 'exact', head: true }),
+          supabase.from('scans').select('*', { count: 'exact', head: true })
+        ])
+
+        // Fetch all completed scans
+        const { data: completedScans, error: scansError } = await supabase
+          .from('scans')
+          .select('id, skill_id, started_at')
+          .eq('status', 'completed')
+          .order('started_at', { ascending: false })
+
+        if (scansError) throw scansError
+
+        // Group completed scans by skill_id and get the latest per skill
+        const latestScansBySkill: Record<string, { id: string; started_at: string }> = {}
+        completedScans?.forEach(scan => {
+          const skillId = scan.skill_id
+          if (!latestScansBySkill[skillId] || new Date(scan.started_at) > new Date(latestScansBySkill[skillId].started_at)) {
+            latestScansBySkill[skillId] = { id: scan.id, started_at: scan.started_at }
+          }
+        })
+        const latestScanIds = Object.values(latestScansBySkill).map(s => s.id)
+
+        // Fetch findings for those latest scans
+        const { data: latestFindings, error: findingsError } = await supabase
+          .from('findings')
+          .select('scan_id, severity, category')
+          .in('scan_id', latestScanIds)
+
+        if (findingsError) throw findingsError
+
+        // Group findings by scan_id
+        const findingsByScanId: Record<string, { severity: SeverityLevel; category: FindingCategory }[]> = {}
+        latestFindings?.forEach(finding => {
+          if (!findingsByScanId[finding.scan_id]) {
+            findingsByScanId[finding.scan_id] = []
+          }
+          findingsByScanId[finding.scan_id].push(finding)
+        })
+
+        // Compute safe and unsafe skills based on whether latest scan has any findings
+        let safeSkills = 0
+        let unsafeSkills = 0
+        Object.values(latestScansBySkill).forEach(scan => {
+          const scanFindings = findingsByScanId[scan.id] || []
+          if (scanFindings.length > 0) {
+            unsafeSkills++
+          } else {
+            safeSkills++
+          }
+        })
+
+        // Fetch overall findings counts by severity
+        const severityCounts: Record<SeverityLevel, number> = {} as any
+        const categoryCounts: Record<FindingCategory, number> = {} as any
+
+        await Promise.all(
+          severities.map(async severity => {
+            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', severity)
+            severityCounts[severity] = count || 0
+          })
+        )
+
+        await Promise.all(
+          categories.map(async category => {
+            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('category', category)
+            categoryCounts[category] = count || 0
+          })
+        )
+
+        // Fetch recent findings with skill_id
+        const { data: recentFindingsData, error: recentFindingsError } = await supabase
+          .from('findings')
+          .select('id, title, severity, category, description, created_at, skill_id')
+          .order('created_at', { ascending: false })
+          .limit(10)
+
+        if (recentFindingsError) throw recentFindingsError
+
+        // Fetch skill names for the recent findings
+        const skillIds = recentFindingsData?.map(f => f.skill_id).filter((id, i, arr) => arr.indexOf(id) === i) || []
+        const { data: skillsData } = await supabase.from('skills').select('id, name').in('id', skillIds)
+        const skillMap = new Map(skillsData?.map(s => [s.id, s.name]) || [])
+
+        const recentFindingsWithSkill: Array<Finding & { skillName: string }> = (recentFindingsData || []).map(f => ({
+          ...f,
+          skillName: skillMap.get(f.skill_id) || 'N/A'
+        }))
+
+        setStats({
+          totalSkills,
+          totalScans,
+          safeSkills,
+          unsafeSkills,
+          findingsBySeverity: severityCounts,
+          findingsByCategory: categoryCounts
+        })
+        setRecentFindings(recentFindingsWithSkill)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 text-lg">Error loading dashboard: {error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-600">No data available.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Skanzer Dashboard</h1>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <StatCard title="Total Skills" value={stats.totalSkills} color="blue" />
+          <StatCard title="Total Scans" value={stats.totalScans} color="blue" />
+          <StatCard title="Safe Skills" value={stats.safeSkills} color="green" />
+          <StatCard title="Unsafe Skills" value={stats.unsafeSkills} color="red" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 mb-8">
+          {/* Findings by Severity */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Severity</h2>
+            <div className="space-y-4">
+              {severities.map(severity => {
+                const count = stats.findingsBySeverity[severity] || 0
+                const total = Object.values(stats.findingsBySeverity).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                const colorMap: Record<SeverityLevel, string> = {
+                  low: 'bg-green-500',
+                  medium: 'bg-yellow-500',
+                  high: 'bg-orange-500',
+                  critical: 'bg-red-500'
+                }
+                return (
+                  <div key={severity}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{severity}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className={`${colorMap[severity]} h-2.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Findings by Category */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Category</h2>
+            <div className="space-y-4">
+              {categories.map(category => {
+                const count = stats.findingsByCategory[category] || 0
+                const total = Object.values(stats.findingsByCategory).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                return (
+                  <div key={category}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{category.replace('_', ' ')}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Findings Table */}
+        <div className="bg-white shadow rounded-lg overflow-hidden mb-8">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-medium text-gray-900">Recent Findings</h2>
+          </div>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skill</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {recentFindings && recentFindings.length > 0 ? (
+                recentFindings.map(finding => (
+                  <tr key={finding.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{finding.skillName}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{finding.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getSeverityColor(finding.severity)}`}>
+                        {finding.severity}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{finding.category.replace('_', ' ')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(finding.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No findings found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  )
+}
+```
+
+I think that's complete.
+
+But wait: In the severity counts and category counts, I used `await Promise.all` inside the try block. That's fine.
+
+One more thing: The totalSkills and totalScans from the count queries might be null if no rows. I default to 0 using `= 0` in the destructuring. That's fine.
+
+Also, in the grouping of completed scans, I used `completedScans?.forEach`. That's okay.
+
+Now, I need to ensure that the imports are correct. The path for supabase client is '@/lib/supabase/client' which matches the provided file. The types are from '@/lib/types'. That's fine.
+
+Now, I'll output the file listing.
+
+------------
+► **ANSWER**
+
+app/dashboard/page.tsx
+```
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { DashboardStats, Finding, SeverityLevel, FindingCategory } from '@/lib/types'
+
+function getSeverityColor(severity: SeverityLevel) {
+  switch (severity) {
+    case 'low':
+      return 'bg-green-100 text-green-800'
+    case 'medium':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'high':
+      return 'bg-orange-100 text-orange-800'
+    case 'critical':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
+function StatCard({ title, value, color = 'blue' }: { title: string; value: number; color?: string }) {
+  const colorClasses: Record<string, string> = {
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    red: 'bg-red-500',
+    yellow: 'bg-yellow-500',
+    default: 'bg-gray-500'
+  }
+  return (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="px-4 py-5 sm:p-6">
+        <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
+        <dd className="mt-1 text-3xl font-semibold text-gray-900">{value}</dd>
+      </div>
+      <div className={`${colorClasses[color] || colorClasses.default} h-1`}></div>
+    </div>
+  )
+}
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentFindings, setRecentFindings] = useState<Array<Finding & { skillName: string }> | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const severities: Array<SeverityLevel> = ['low', 'medium', 'high', 'critical']
+  const categories: Array<FindingCategory> = ['data_exfiltration', 'behavior_mismatch', 'privilege_escalation', 'other']
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const supabase = createClient()
+
+        // Fetch total counts for skills and scans
+        const [{ count: totalSkills = 0 }, { count: totalScans = 0 }] = await Promise.all([
+          supabase.from('skills').select('*', { count: 'exact', head: true }),
+          supabase.from('scans').select('*', { count: 'exact', head: true })
+        ])
+
+        // Fetch all completed scans
+        const { data: completedScans, error: scansError } = await supabase
+          .from('scans')
+          .select('id, skill_id, started_at')
+          .eq('status', 'completed')
+          .order('started_at', { ascending: false })
+
+        if (scansError) throw scansError
+
+        // Group completed scans by skill_id and get the latest per skill
+        const latestScansBySkill: Record<string, { id: string; started_at: string }> = {}
+        completedScans?.forEach(scan => {
+          const skillId = scan.skill_id
+          if (!latestScansBySkill[skillId] || new Date(scan.started_at) > new Date(latestScansBySkill[skillId].started_at)) {
+            latestScansBySkill[skillId] = { id: scan.id, started_at: scan.started_at }
+          }
+        })
+        const latestScanIds = Object.values(latestScansBySkill).map(s => s.id)
+
+        // Fetch findings for those latest scans
+        const { data: latestFindings, error: findingsError } = await supabase
+          .from('findings')
+          .select('scan_id, severity, category')
+          .in('scan_id', latestScanIds)
+
+        if (findingsError) throw findingsError
+
+        // Group findings by scan_id
+        const findingsByScanId: Record<string, { severity: SeverityLevel; category: FindingCategory }[]> = {}
+        latestFindings?.forEach(finding => {
+          if (!findingsByScanId[finding.scan_id]) {
+            findingsByScanId[finding.scan_id] = []
+          }
+          findingsByScanId[finding.scan_id].push(finding)
+        })
+
+        // Compute safe and unsafe skills based on whether latest scan has any findings
+        let safeSkills = 0
+        let unsafeSkills = 0
+        Object.values(latestScansBySkill).forEach(scan => {
+          const scanFindings = findingsByScanId[scan.id] || []
+          if (scanFindings.length > 0) {
+            unsafeSkills++
+          } else {
+            safeSkills++
+          }
+        })
+
+        // Fetch overall findings counts by severity
+        const severityCounts: Record<SeverityLevel, number> = {} as any
+        const categoryCounts: Record<FindingCategory, number> = {} as any
+
+        await Promise.all(
+          severities.map(async severity => {
+            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('severity', severity)
+            severityCounts[severity] = count || 0
+          })
+        )
+
+        await Promise.all(
+          categories.map(async category => {
+            const { count } = await supabase.from('findings').select('*', { count: 'exact', head: true }).eq('category', category)
+            categoryCounts[category] = count || 0
+          })
+        )
+
+        // Fetch recent findings with skill_id
+        const { data: recentFindingsData, error: recentFindingsError } = await supabase
+          .from('findings')
+          .select('id, title, severity, category, description, created_at, skill_id')
+          .order('created_at', { ascending: false })
+          .limit(10)
+
+        if (recentFindingsError) throw recentFindingsError
+
+        // Fetch skill names for the recent findings
+        const skillIds = recentFindingsData?.map(f => f.skill_id).filter((id, i, arr) => arr.indexOf(id) === i) || []
+        const { data: skillsData } = await supabase.from('skills').select('id, name').in('id', skillIds)
+        const skillMap = new Map(skillsData?.map(s => [s.id, s.name]) || [])
+
+        const recentFindingsWithSkill: Array<Finding & { skillName: string }> = (recentFindingsData || []).map(f => ({
+          ...f,
+          skillName: skillMap.get(f.skill_id) || 'N/A'
+        }))
+
+        setStats({
+          totalSkills,
+          totalScans,
+          safeSkills,
+          unsafeSkills,
+          findingsBySeverity: severityCounts,
+          findingsByCategory: categoryCounts
+        })
+        setRecentFindings(recentFindingsWithSkill)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 text-lg">Error loading dashboard: {error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-600">No data available.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Skanzer Dashboard</h1>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <StatCard title="Total Skills" value={stats.totalSkills} color="blue" />
+          <StatCard title="Total Scans" value={stats.totalScans} color="blue" />
+          <StatCard title="Safe Skills" value={stats.safeSkills} color="green" />
+          <StatCard title="Unsafe Skills" value={stats.unsafeSkills} color="red" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 mb-8">
+          {/* Findings by Severity */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Severity</h2>
+            <div className="space-y-4">
+              {severities.map(severity => {
+                const count = stats.findingsBySeverity[severity] || 0
+                const total = Object.values(stats.findingsBySeverity).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                const colorMap: Record<SeverityLevel, string> = {
+                  low: 'bg-green-500',
+                  medium: 'bg-yellow-500',
+                  high: 'bg-orange-500',
+                  critical: 'bg-red-500'
+                }
+                return (
+                  <div key={severity}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{severity}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className={`${colorMap[severity]} h-2.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Findings by Category */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Findings by Category</h2>
+            <div className="space-y-4">
+              {categories.map(category => {
+                const count = stats.findingsByCategory[category] || 0
+                const total = Object.values(stats.findingsByCategory).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+                return (
+                  <div key={category}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize">{category.replace('_', ' ')}</span>
+                      <span>{count} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Findings Table */}
+        <div className="bg-white shadow rounded-lg overflow-hidden mb-8">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-medium text-gray-900">Recent Findings</h2>
+          </div>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skill</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {recentFindings && recentFindings.length > 0 ? (
+                recentFindings.map(finding => (
+                  <tr key={finding.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{finding.skillName}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{finding.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getSeverityColor(finding.severity)}`}>
+                        {finding.severity}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{finding.category.replace('_', ' ')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(finding.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No findings found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  )
+}
+```
+Tokens: 2.6k sent, 21k received.
+Applied edit to app/dashboard/page.tsx
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+summarizer unexpectedly failed for all models
+[19:56:10]   [1/10] Done (12999 bytes)
