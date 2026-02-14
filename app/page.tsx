@@ -1,6 +1,21 @@
 import Link from "next/link";
+import { createServiceClient } from "@/lib/supabase/server";
 
-export default function Home() {
+export const revalidate = 60;
+
+export default async function Home() {
+  const admin = createServiceClient();
+
+  const [{ count: skillCount }, { count: suspiciousCount }] = await Promise.all([
+    admin.from("skills").select("*", { count: "exact", head: true }),
+    admin
+      .from("findings")
+      .select("skill_id", { count: "exact", head: true })
+      .in("severity", ["high", "critical"]),
+  ]);
+
+  const scanned = skillCount ?? 0;
+  const suspicious = suspiciousCount ?? 0;
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text">
       {/* Nav */}
@@ -35,6 +50,22 @@ export default function Home() {
           Start scanning
         </Link>
       </section>
+
+      {/* Live stats */}
+      {scanned > 0 && (
+        <section className="px-6 pb-16 max-w-5xl mx-auto">
+          <div className="flex gap-12 sm:gap-20">
+            <div>
+              <div className="font-mono text-4xl sm:text-5xl font-bold text-brand-text">{scanned}</div>
+              <div className="font-mono text-xs text-brand-muted mt-1">skills scanned</div>
+            </div>
+            <div>
+              <div className="font-mono text-4xl sm:text-5xl font-bold text-brand-accent">{suspicious}</div>
+              <div className="font-mono text-xs text-brand-muted mt-1">suspicious findings</div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* What we catch — oversized numbers as structural design */}
       <section className="px-6 pb-24 max-w-5xl mx-auto">
