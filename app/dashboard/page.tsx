@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
-import { DashboardStats, Finding, SeverityLevel, FindingCategory } from '@/lib/types'
+import { SeverityLevel, FindingCategory, Finding } from '@/lib/types'
 import AppNav from '@/app/components/app-nav'
 
 function getSeverityColor(severity: SeverityLevel) {
@@ -25,9 +25,18 @@ function StatCard({ title, value, accent = false }: { title: string; value: numb
   )
 }
 
+interface DashboardData {
+  totalSkills: number
+  totalScans: number
+  safeSkills: number
+  unsafeSkills: number
+  findingsBySeverity: Record<SeverityLevel, number>
+  findingsByCategory: Record<FindingCategory, number>
+  recentFindings: Array<Finding & { skillName: string }>
+}
+
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [recentFindings, setRecentFindings] = useState<Array<Finding & { skillName: string }> | null>(null)
+  const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,100 +50,73 @@ export default function DashboardPage() {
       try {
         const supabase = createClient()
 
-        const [skillsResult, scansResult] = await Promise.all([
-          supabase.from('skills').select('*', { count: 'exact', head: true }),
-          supabase.from('scans').select('*', { count: 'exact', head: true })
-        ])
-        const totalSkills = skillsResult.count ?? 0
-        const totalScans = scansResult.count ?? 0
-
-        const { data: completedScans, error: scansError } = await supabase
+        // Single query: get all scans with their skill name and findings
+        const { data: scans, error: scansError } = await supabase
           .from('scans')
-          .select('id, skill_id, started_at')
-          .eq('status', 'completed')
+          .select(`
+            id, skill_id, status, started_at,
+            skill:skills(id, name),
+            findings:findings(id, scan_id, skill_id, title, severity, category, description, created_at)
+          `)
           .order('started_at', { ascending: false })
 
-        if (scansError) throw scansError
+        if (scansError) throw new Error(scansError.message)
 
-        const latestScansBySkill: Record<string, { id: string; started_at: string }> = {}
-        completedScans?.forEach(scan => {
-          const skillId = scan.skill_id
-          if (!latestScansBySkill[skillId] || new Date(scan.started_at) > new Date(latestScansBySkill[skillId].started_at)) {
-            latestScansBySkill[skillId] = { id: scan.id, started_at: scan.started_at }
+        const allScans = scans || []
+        const totalScans = allScans.length
+
+        // Unique skills
+        const skillIds = new Set(allScans.map(s => s.skill_id))
+        const totalSkills = skillIds.size
+
+        // For each skill, find its latest completed scan
+        const latestBySkill: Record<string, typeof allScans[0]> = {}
+        allScans.forEach(scan => {
+          if (scan.status !== 'completed') return
+          if (!latestBySkill[scan.skill_id]) {
+            latestBySkill[scan.skill_id] = scan
           }
-        })
-        const latestScanIds = Object.values(latestScansBySkill).map(s => s.id)
-
-        let latestFindings: { scan_id: string; severity: SeverityLevel; category: FindingCategory }[] = []
-        if (latestScanIds.length > 0) {
-          const { data, error: findingsError } = await supabase
-            .from('findings')
-            .select('scan_id, severity, category')
-            .in('scan_id', latestScanIds)
-          if (findingsError) throw findingsError
-          latestFindings = data || []
-        }
-
-        const findingsByScanId: Record<string, { severity: SeverityLevel; category: FindingCategory }[]> = {}
-        latestFindings.forEach(finding => {
-          if (!findingsByScanId[finding.scan_id]) {
-            findingsByScanId[finding.scan_id] = []
-          }
-          findingsByScanId[finding.scan_id].push(finding)
         })
 
         let safeSkills = 0
         let unsafeSkills = 0
-        Object.values(latestScansBySkill).forEach(scan => {
-          const scanFindings = findingsByScanId[scan.id] || []
-          if (scanFindings.length > 0) {
+        const severityCounts: Record<SeverityLevel, number> = { low: 0, medium: 0, high: 0, critical: 0 }
+        const categoryCounts: Record<FindingCategory, number> = { malware: 0, data_exfiltration: 0, behavior_mismatch: 0, privilege_escalation: 0, other: 0 }
+
+        Object.values(latestBySkill).forEach(scan => {
+          const findings = scan.findings || []
+          if (findings.length > 0) {
             unsafeSkills++
+            findings.forEach(f => {
+              if (f.severity in severityCounts) severityCounts[f.severity as SeverityLevel]++
+              if (f.category in categoryCounts) categoryCounts[f.category as FindingCategory]++
+            })
           } else {
             safeSkills++
           }
         })
 
-        const severityCounts: Record<SeverityLevel, number> = { low: 0, medium: 0, high: 0, critical: 0 }
-        const categoryCounts: Record<FindingCategory, number> = { malware: 0, data_exfiltration: 0, behavior_mismatch: 0, privilege_escalation: 0, other: 0 }
+        // Recent findings across all scans
+        const allFindings = allScans.flatMap(scan =>
+          (scan.findings || []).map(f => ({
+            ...f,
+            skillName: (scan.skill as any)?.name || 'Unknown'
+          }))
+        )
+        allFindings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        const recentFindings = allFindings.slice(0, 10)
 
-        // Count findings from already-fetched latest findings instead of separate queries
-        latestFindings.forEach(finding => {
-          if (finding.severity in severityCounts) severityCounts[finding.severity]++
-          if (finding.category in categoryCounts) categoryCounts[finding.category]++
-        })
-
-        const { data: recentFindingsData, error: recentFindingsError } = await supabase
-          .from('findings')
-          .select('id, scan_id, title, severity, category, description, created_at, skill_id')
-          .order('created_at', { ascending: false })
-          .limit(10)
-
-        if (recentFindingsError) throw recentFindingsError
-
-        const skillIds = recentFindingsData?.map(f => f.skill_id).filter((id, i, arr) => arr.indexOf(id) === i) || []
-        let skillsData: { id: string; name: string }[] | null = []
-        if (skillIds.length > 0) {
-          const { data } = await supabase.from('skills').select('id, name').in('id', skillIds)
-          skillsData = data
-        }
-        const skillMap = new Map(skillsData?.map(s => [s.id, s.name]) || [])
-
-        const recentFindingsWithSkill: Array<Finding & { skillName: string }> = (recentFindingsData || []).map(f => ({
-          ...f,
-          skillName: skillMap.get(f.skill_id) || 'N/A'
-        }))
-
-        setStats({
+        setData({
           totalSkills,
           totalScans,
           safeSkills,
           unsafeSkills,
           findingsBySeverity: severityCounts,
-          findingsByCategory: categoryCounts
+          findingsByCategory: categoryCounts,
+          recentFindings
         })
-        setRecentFindings(recentFindingsWithSkill)
       } catch (err: any) {
-        setError(err.message)
+        setError(err.message || 'Failed to load dashboard')
       } finally {
         setLoading(false)
       }
@@ -173,7 +155,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (!stats || (stats.totalSkills === 0 && stats.totalScans === 0)) {
+  if (!data || (data.totalSkills === 0 && data.totalScans === 0)) {
     return (
       <div className="min-h-screen bg-brand-bg">
         <AppNav />
@@ -217,10 +199,10 @@ export default function DashboardPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-brand-border mb-8">
-          <StatCard title="Skills" value={stats.totalSkills} />
-          <StatCard title="Scans" value={stats.totalScans} />
-          <StatCard title="Clean" value={stats.safeSkills} />
-          <StatCard title="Flagged" value={stats.unsafeSkills} accent />
+          <StatCard title="Skills" value={data.totalSkills} />
+          <StatCard title="Scans" value={data.totalScans} />
+          <StatCard title="Clean" value={data.safeSkills} />
+          <StatCard title="Flagged" value={data.unsafeSkills} accent />
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 mb-8">
@@ -229,8 +211,8 @@ export default function DashboardPage() {
             <h2 className="font-mono text-sm font-bold text-brand-text mb-4">By severity</h2>
             <div className="space-y-3">
               {severities.map(severity => {
-                const count = stats.findingsBySeverity[severity] || 0
-                const total = Object.values(stats.findingsBySeverity).reduce((a, b) => a + b, 0)
+                const count = data.findingsBySeverity[severity] || 0
+                const total = Object.values(data.findingsBySeverity).reduce((a, b) => a + b, 0)
                 const percentage = total > 0 ? Math.round((count / total) * 100) : 0
                 const colorMap: Record<SeverityLevel, string> = {
                   low: 'bg-green-500',
@@ -258,8 +240,8 @@ export default function DashboardPage() {
             <h2 className="font-mono text-sm font-bold text-brand-text mb-4">By category</h2>
             <div className="space-y-3">
               {categories.map(category => {
-                const count = stats.findingsByCategory[category] || 0
-                const total = Object.values(stats.findingsByCategory).reduce((a, b) => a + b, 0)
+                const count = data.findingsByCategory[category] || 0
+                const total = Object.values(data.findingsByCategory).reduce((a, b) => a + b, 0)
                 const percentage = total > 0 ? Math.round((count / total) * 100) : 0
                 return (
                   <div key={category}>
@@ -294,8 +276,8 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-border">
-              {recentFindings && recentFindings.length > 0 ? (
-                recentFindings.map(finding => (
+              {data.recentFindings.length > 0 ? (
+                data.recentFindings.map(finding => (
                   <tr key={finding.id}>
                     <td className="px-6 py-3 whitespace-nowrap text-sm text-brand-text">{finding.skillName}</td>
                     <td className="px-6 py-3 text-sm text-brand-text">{finding.title}</td>
