@@ -65,15 +65,18 @@ export default function DashboardPage() {
         })
         const latestScanIds = Object.values(latestScansBySkill).map(s => s.id)
 
-        const { data: latestFindings, error: findingsError } = await supabase
-          .from('findings')
-          .select('scan_id, severity, category')
-          .in('scan_id', latestScanIds)
-
-        if (findingsError) throw findingsError
+        let latestFindings: { scan_id: string; severity: SeverityLevel; category: FindingCategory }[] = []
+        if (latestScanIds.length > 0) {
+          const { data, error: findingsError } = await supabase
+            .from('findings')
+            .select('scan_id, severity, category')
+            .in('scan_id', latestScanIds)
+          if (findingsError) throw findingsError
+          latestFindings = data || []
+        }
 
         const findingsByScanId: Record<string, { severity: SeverityLevel; category: FindingCategory }[]> = {}
-        latestFindings?.forEach(finding => {
+        latestFindings.forEach(finding => {
           if (!findingsByScanId[finding.scan_id]) {
             findingsByScanId[finding.scan_id] = []
           }
@@ -117,7 +120,11 @@ export default function DashboardPage() {
         if (recentFindingsError) throw recentFindingsError
 
         const skillIds = recentFindingsData?.map(f => f.skill_id).filter((id, i, arr) => arr.indexOf(id) === i) || []
-        const { data: skillsData } = await supabase.from('skills').select('id, name').in('id', skillIds)
+        let skillsData: { id: string; name: string }[] | null = []
+        if (skillIds.length > 0) {
+          const { data } = await supabase.from('skills').select('id, name').in('id', skillIds)
+          skillsData = data
+        }
         const skillMap = new Map(skillsData?.map(s => [s.id, s.name]) || [])
 
         const recentFindingsWithSkill: Array<Finding & { skillName: string }> = (recentFindingsData || []).map(f => ({
