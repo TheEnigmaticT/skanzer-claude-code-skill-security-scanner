@@ -361,21 +361,33 @@ export function analyzeSkillContent(
 
     const snippet = trimmedLine.length > 100 ? trimmedLine.substring(0, 100) + '...' : trimmedLine
 
-    // Data exfiltration: URLs (global match to catch multiple per line)
-    const urlRegex = /https?:\/\/[^\s)>"'`]+/g
+    // Data exfiltration: URLs — skip markdown doc links and well-known safe domains
+    const urlRegex = /https?:\/\/[^\s)>"'`\]]+/g
+    const safeHostRegex = /^https?:\/\/(github\.com|gitlab\.com|npmjs\.com|docs\.|claude\.ai|anthropic\.com|x\.com|twitter\.com|basecamp\.com|stackoverflow\.com|wikipedia\.org|developer\.mozilla\.org|medium\.com|dev\.to|youtube\.com|en\.wikipedia|reddit\.com|discord\.com|slack\.com|vercel\.com|netlify\.com|supabase\.com|nodejs\.org|python\.org|rust-lang\.org|go\.dev|nextjs\.org|reactjs\.org|tailwindcss\.com|typescriptlang\.org)(\/|$)/i
+    const isMarkdownLink = /\[.*?\]\(https?:\/\//.test(line)
     let match
+    const urlsOnLine: string[] = []
     while ((match = urlRegex.exec(line)) !== null) {
-      findings.push({
-        scan_id: scanId,
-        skill_id: skillId,
-        category: 'data_exfiltration',
-        severity: 'medium',
-        title: 'Network communication detected',
-        description: `URL detected: ${match[0]}`,
-        line_number: lineNum,
-        code_snippet: snippet,
-        confidence: 0.9
-      })
+      const url = match[0]
+      // Skip safe documentation/reference domains
+      if (safeHostRegex.test(url)) continue
+      urlsOnLine.push(url)
+    }
+    // If all URLs on this line are in markdown link syntax and none are suspicious, skip
+    if (urlsOnLine.length > 0 && !(isMarkdownLink && urlsOnLine.length === 0)) {
+      for (const url of urlsOnLine) {
+        findings.push({
+          scan_id: scanId,
+          skill_id: skillId,
+          category: 'data_exfiltration',
+          severity: 'medium',
+          title: 'Network communication detected',
+          description: `URL detected: ${url}`,
+          line_number: lineNum,
+          code_snippet: snippet,
+          confidence: 0.9
+        })
+      }
     }
 
     // Data exfiltration: fetch/curl/wget/axios
