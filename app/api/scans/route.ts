@@ -4,7 +4,7 @@ import type { Scan, ScanWithDetails, DashboardStats, SeverityLevel, FindingCateg
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     const totalScans = scans?.length || 0
 
     // Determine safe/unsafe skills based on latest scan
-    const latestScansBySkill = new Map<string, Scan>()
+    const latestScansBySkill = new Map<string, any>()
     scans?.forEach(scan => {
       const existing = latestScansBySkill.get(scan.skill_id)
       if (!existing || new Date(scan.started_at) > new Date(existing.started_at)) {
@@ -64,10 +64,8 @@ export async function GET(request: NextRequest) {
     let safeSkills = 0
     let unsafeSkills = 0
     for (const scan of latestScansBySkill.values()) {
-      const hasSevereFinding = scan.findings?.some((finding: any) => 
-        ['medium', 'high', 'critical'].includes(finding.severity)
-      ) ?? false
-      if (hasSevereFinding) {
+      const hasFindings = scan.status === 'completed' && scan.findings && scan.findings.length > 0
+      if (hasFindings) {
         unsafeSkills++
       } else {
         safeSkills++
@@ -91,10 +89,10 @@ export async function GET(request: NextRequest) {
     scans?.forEach(scan => {
       scan.findings?.forEach((finding: any) => {
         if (finding.severity in severityCounts) {
-          severityCounts[finding.severity]++
+          severityCounts[finding.severity as SeverityLevel]++
         }
         if (finding.category in categoryCounts) {
-          categoryCounts[finding.category]++
+          categoryCounts[finding.category as FindingCategory]++
         }
       })
     })
@@ -123,7 +121,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -193,7 +191,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -225,7 +223,7 @@ export async function PUT(request: NextRequest) {
       .eq('id', scan_id)
       .single()
 
-    if (checkError || !scanCheck || scanCheck.skill.user_id !== user.id) {
+    if (checkError || !scanCheck || (scanCheck.skill as any).user_id !== user.id) {
       return NextResponse.json(
         { error: 'Scan not found or access denied' },
         { status: 404 }
@@ -277,7 +275,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -324,7 +322,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     for (const scan of scans) {
-      if (scan.skill.user_id !== user.id) {
+      if ((scan.skill as any).user_id !== user.id) {
         return NextResponse.json(
           { error: 'Access denied to one or more scans' },
           { status: 403 }

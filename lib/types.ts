@@ -1,5 +1,6 @@
 export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical'
 export type ScanStatus = 'pending' | 'scanning' | 'completed' | 'failed'
+export const SCAN_STATUS_VALUES = ['pending', 'scanning', 'completed', 'failed'] as const
 export type FindingCategory = 'data_exfiltration' | 'behavior_mismatch' | 'privilege_escalation' | 'other'
 
 export interface Skill {
@@ -49,3 +50,6 @@ export interface DashboardStats {
   findingsBySeverity: Record<SeverityLevel, number>
   findingsByCategory: Record<FindingCategory, number>
 }
+
+// Force Turbopack to treat this as a runtime module
+export const __esModule = true;

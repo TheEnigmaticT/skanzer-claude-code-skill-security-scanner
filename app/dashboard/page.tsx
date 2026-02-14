@@ -55,10 +55,12 @@ export default function DashboardPage() {
         const supabase = createClient()
 
         // Fetch total counts for skills and scans
-        const [{ count: totalSkills = 0 }, { count: totalScans = 0 }] = await Promise.all([
+        const [skillsResult, scansResult] = await Promise.all([
           supabase.from('skills').select('*', { count: 'exact', head: true }),
           supabase.from('scans').select('*', { count: 'exact', head: true })
         ])
+        const totalSkills = skillsResult.count ?? 0
+        const totalScans = scansResult.count ?? 0
 
         // Fetch all completed scans
         const { data: completedScans, error: scansError } = await supabase
@@ -129,7 +131,7 @@ export default function DashboardPage() {
         // Fetch recent findings with skill_id
         const { data: recentFindingsData, error: recentFindingsError } = await supabase
           .from('findings')
-          .select('id, title, severity, category, description, created_at, skill_id')
+          .select('id, scan_id, title, severity, category, description, created_at, skill_id')
           .order('created_at', { ascending: false })
           .limit(10)
 

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { ScanWithDetails, SeverityLevel, ScanStatus } from '@/lib/types'
+import type { ScanWithDetails, SeverityLevel, ScanStatus } from '@/lib/types'
+import { SCAN_STATUS_VALUES } from '@/lib/types'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
@@ -70,7 +71,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
@@ -85,9 +86,9 @@ export async function PUT(
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
         if (field === 'status') {
-          if (!Object.values(ScanStatus).includes(body[field])) {
+          if (!SCAN_STATUS_VALUES.includes(body[field] as any)) {
             return NextResponse.json(
-              { error: `Invalid status. Must be one of: ${Object.values(ScanStatus).join(', ')}` },
+              { error: `Invalid status. Must be one of: ${SCAN_STATUS_VALUES.join(', ')}` },
               { status: 400 }
             )
           }
@@ -136,7 +137,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
