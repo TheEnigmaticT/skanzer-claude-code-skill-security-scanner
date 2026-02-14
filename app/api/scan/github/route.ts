@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { getFilesContent } from '@/lib/github'
+import { getFilesContent, getRepoDefaultBranch } from '@/lib/github'
 import { analyzeSkillContent } from '@/lib/analyze'
 import type { ScanWithDetails } from '@/lib/types'
 
@@ -34,8 +34,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Always resolve branch so raw.githubusercontent.com fetching works
+    const resolvedBranch = branch || await getRepoDefaultBranch(owner, repo)
+
     // Fetch all file contents with concurrency control (10 at a time via raw.githubusercontent.com)
-    const fileContents = await getFilesContent(owner, repo, files, branch, 10)
+    const fileContents = await getFilesContent(owner, repo, files, resolvedBranch, 10)
 
     // Process each file: create skill, scan, analyze, insert findings
     const scanIds: string[] = []
