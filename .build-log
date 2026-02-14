@@ -10886,3 +10886,1282 @@ Summarization failed for model openai/botty-step-flash: cannot schedule new futu
 Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
 summarizer unexpectedly failed for all models
 [20:02:51]   [6/10] Done (7238 bytes)
+[20:02:52]   [7/10] Building app/api/scan/file/route.ts...
+[20:02:52]   [aider] Starting task...
+/Users/ct-mac-mini/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Warning: Input is not a terminal (fd=0).
+
+Warning for openai/botty-step-flash: Unknown context window size and costs, 
+using sane defaults.
+You can skip this check with --no-show-model-warnings
+
+https://aider.chat/docs/llms/warnings.html
+
+Creating empty file 
+/Users/ct-mac-mini/dev/skanzer-claude-code-skill-security-scanner-upload-/app/ap
+i/scan/file/route.ts
+Aider v0.82.3
+Model: openai/botty-step-flash with whole edit format
+Git repo: .git with 33 files
+Repo-map: using 1024 tokens, auto refresh
+Added app/api/scan/file/route.ts to the chat.
+Added lib/supabase/server.ts to the chat (read-only).
+Added lib/types.ts to the chat (read-only).
+Added app/nav.tsx to the chat (read-only).
+Added lib/supabase/client.ts to the chat (read-only).
+
+
+--------------
+► **THINKING**
+
+We are building an API route for handling single file uploads and static analysis.
+ The route should handle POST requests for uploading a file and starting a scan.
+ We are to use the Supabase client from lib/supabase/server.ts and types from lib/types.ts.
+
+ Steps for POST:
+ 1. Parse the form data to get the file and any other metadata (like skill name, description, etc.)
+ 2. Read the file content (assuming it's a markdown file)
+ 3. Perform static analysis on the file content to detect suspicious patterns (data exfiltration, behavior mismatch, privilege escalation)
+ 4. Create a new skill record in the database with the file content and metadata.
+ 5. Create a new scan record for that skill, initially with status 'scanning' or 'pending'? We'll set to 'scanning' and then update after analysis.
+ 6. Insert findings for the scan based on the analysis.
+ 7. Update the scan status to 'completed' and set completed_at.
+
+ However, note that the requirement says: "Handle appropriate HTTP methods (GET, POST, PUT, DELETE)". But for this specific route, we are only handling a single file upload and scan. So we might not need all methods.
+
+ Let's break down:
+
+ - POST: Create a new skill from the uploaded file and run a scan.
+ - GET: Maybe retrieve the scan results for a given file? But the route is for a single file, so we might need an id. However, the route is fixed as `/api/scan/file`. We could use query parameters? But the requirement says to handle GET, POST, PUT, DELETE. Alternatively, we might design:
+
+   POST /api/scan/file -> upload and scan a file, returns the scan id and maybe the results?
+   GET /api/scan/file?scan_id=... -> get the results of a scan by id? But then we are not using the file.
+
+ Alternatively, we might not need GET for this route because we have other routes for scans (like /api/scans/[id]). But the requirement says to handle appropriate HTTP methods. Since the route is for a single file, maybe:
+
+   POST: create a new scan from a file.
+   GET: get the status or results of the most recent scan for the current user? Not clear.
+
+ Let's re-read: "Build the API route: app/api/scan/file/route.ts"
+
+ The purpose: "Handle single file upload and static analysis for suspicious patterns"
+
+ So the main action is to handle a file upload and then run the analysis. We might not need GET, PUT, DELETE for this specific route. But the requirement says to handle appropriate HTTP methods. We can leave GET, PUT, DELETE unimplemented or return 405.
+
+ However, the user might want to:
+
+   - POST: upload a file and get a scan result.
+   - GET: maybe retrieve the scan result by some identifier? But the route doesn't have an id in the path.
+
+ Alternatively, we can design:
+
+   POST: returns the scan result immediately (since it's a single file, we can do synchronous analysis? or we can do async and return the scan id and then the client can poll?).
+
+ But note: the other pages (like app/history/page.tsx) are fetching scans from the 'scans' table. So we are storing the scan in the database.
+
+ Let's think about the flow:
+
+   User uploads a file -> we create a skill and a scan -> we run the analysis -> we store findings -> we update the scan.
+
+   We can do this synchronously in the POST request? It might take time, but for a single file it might be acceptable.
+
+   Alternatively, we can do it asynchronously and return 202 Accepted with a scan id, and then the client can check the scan status.
+
+   However, the requirement says: "Handle single file upload and static analysis". It doesn't specify async or sync.
+
+   Given that we are in a serverless environment, we might want to avoid long-running requests. But for simplicity, let's do it synchronously and return the results.
+
+   But note: the other pages (like history) are showing scans that are already completed. So we are storing the scan and findings.
+
+   So for POST:
+
+    1. Get the file from the request (form data).
+    2. Read the file as text.
+    3. Create a skill record (with the file content? or we store the file in storage? The requirement says "Upload skill markdown files", so we might store the file content in the skill record? The Skill interface has a 'content' field and a 'file_path' field. We can store the content in the 'content' field and leave file_path empty? Or we can store the file in Supabase storage and set the file_path.
+
+    Looking at the Skill interface:
+
+      export interface Skill {
+        id: string
+        user_id: string
+        name: string
+        description?: string
+        content: string
+        file_path?: string
+        created_at: string
+        updated_at: string
+      }
+
+    We have a 'content' field (string) and a 'file_path' (optional). We can store the markdown content in 'content' and if we want to store the file, we can use storage and set file_path.
+
+    Since we are uploading a file, we can store the file in storage and then set the file_path. But the requirement says "static analysis on markdown", so we need the content. We can store the content in the database and also store the file in storage for later retrieval? But the Skill interface doesn't have a file_url, only file_path. We can store the path in storage.
+
+    However, the current code in other pages (like app/scan/directory/page.tsx) is fetching skills and using skill.content? Not sure.
+
+    Let's check the provided code snippets:
+
+      In app/history/page.tsx, we are selecting `skill:skills(*)` and then using `scan.skill.name`. We are not using the content.
+
+      In app/scan/directory/page.tsx, we are selecting `skills(*)` and then using `skill.name` and `skill.id`.
+
+    So the content is not being displayed in these pages. But we are storing it.
+
+    For the analysis, we need the content. So we can store the content in the skill record.
+
+    Steps for POST:
+
+      a. Get the current user from the request (using the Supabase server client, we can get the user from the request cookies?).
+      b. Parse the form data: we expect a file and maybe a name and description? The form in app/scan/file/page.tsx has:
+
+          <input
+            id="name"
+            name="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+
+          and a file input.
+
+        So we have a name and a file. We don't have a description in that form? But the Skill interface has description? We can leave it empty.
+
+      c. Read the file as text.
+
+      d. Create a skill record:
+
+          {
+            user_id: currentUser.id,
+            name: formData.get('name'),
+            description: '', // or maybe from form? not in the form.
+            content: fileContent,
+            file_path: '' // we are not storing the file in storage? We can store it if we want, but we have the content.
+          }
+
+      e. Create a scan record:
+
+          {
+            skill_id: newSkill.id,
+            status: 'scanning', // we will update to 'completed' after analysis
+            started_at: new Date().toISOString(),
+            completed_at: null,
+            error_message: null
+          }
+
+      f. Perform the static analysis on the fileContent. We need to write the analysis function.
+
+      g. For each finding, create a Finding record:
+
+          {
+            scan_id: newScan.id,
+            skill_id: newSkill.id,
+            category: ...,
+            severity: ...,
+            title: ...,
+            description: ...,
+            line_number: ...,
+            code_snippet: ...,
+            confidence: ...,
+            created_at: new Date().toISOString()
+          }
+
+      h. Update the scan record to status 'completed' and set completed_at.
+
+      i. Return the scan with details (or at least the scan id and status).
+
+    However, note that the analysis might take time and we are in a serverless function with a timeout. We might want to do the analysis in the background? But then we have to return something.
+
+    Alternatively, we can do:
+
+      - Create the skill and scan (with status 'pending')
+      - Then trigger a background job (using Supabase's pg_net or a queue) to do the analysis and update the scan.
+
+    But for simplicity, let's do it synchronously and hope the file is not too big.
+
+    We are only scanning one file, so it should be okay.
+
+    Now, the analysis function:
+
+      We need to detect:
+
+        1) Data exfiltration: HTTP calls, file writes outside workspace, env var access.
+        2) Behavior vs description mismatches: parse skill actions vs stated purpose. (We don't have a description in the skill? We have a description field in Skill, but the form doesn't have it. We can skip this for now? Or we can use the name as the description? Not ideal.)
+        3) Privilege escalation: sudo, dangerous bash commands.
+
+      We are scanning markdown? The skill is a markdown file? The form says "Upload Skill" and the input is a file. The file might be a markdown file that describes the skill? But the skill content is stored as string.
+
+      Actually, the skill might be a code file? The example in the provided code snippets doesn't show.
+
+      Let's assume the skill is a markdown file that contains code blocks? Or it could be a code file.
+
+      The analysis should look for patterns in the text.
+
+      We can write a simple function that:
+
+        - For data exfiltration: look for strings like 'http://', 'https://', 'fetch', 'axios', 'curl', 'file writes' (like 'writeFile', 'fs.writeFile', etc.), and environment variable access (like 'process.env', 'os.getenv').
+
+        - For privilege escalation: look for 'sudo', 'chmod', 'chown', etc.
+
+        - For behavior mismatch: we don't have a description, so we can skip? Or we can compare the file name (or skill name) with the content? Not reliable.
+
+      Since we don't have a description, we might skip the behavior mismatch for now.
+
+      We'll return an array of findings.
+
+    We'll define:
+
+      type FindingCategory = 'data_exfiltration' | 'behavior_mismatch' | 'privilege_escalation' | 'other'
+
+      and SeverityLevel.
+
+    We'll assign severity based on the pattern? For example, 'sudo' might be high, 'http' might be medium, etc.
+
+    We'll also try to get the line number and code snippet for the finding.
+
+    Steps for analysis:
+
+      Split the content by newline.
+
+      For each line, check for patterns.
+
+      We can use regex.
+
+    But note: the file might be a markdown file with code blocks. We might want to extract code from code blocks? Or just scan the entire text.
+
+    Since the skill is a markdown file, we might have code blocks. We can try to extract code blocks and then scan the code? But the requirement says "static analysis on markdown", so maybe we are scanning the markdown text for suspicious patterns? That might be too broad.
+
+    Alternatively, we can assume the skill is a code file (like a bash script, python, etc.) and the markdown is just a wrapper? Not clear.
+
+    Given the time, let's assume we are scanning the entire text (including markdown) for the patterns.
+
+    We'll do:
+
+      const lines = content.split('\n');
+
+      Then for each line, we check:
+
+        if (line includes 'sudo') -> privilege escalation, high severity, line number, code snippet = line.
+
+        if (line includes 'http://' or 'https://') -> data exfiltration, medium severity? But note: the skill might be allowed to make HTTP calls? We don't know. We'll mark as medium.
+
+        if (line includes 'process.env' or 'os.getenv') -> data exfiltration, high? because env vars might contain secrets.
+
+        if (line includes 'writeFile' or 'fs.writeFile') -> data exfiltration, high? because writing files might be exfiltration.
+
+    We can also look for 'curl' and 'wget'.
+
+    We'll create a list of patterns and their category and severity.
+
+    We'll also try to get a title and description for each finding.
+
+    We can have:
+
+      const patterns = [
+        { regex: /sudo/, category: 'privilege_escalation', severity: 'high', title: 'Use of sudo', description: 'The skill uses sudo, which can lead to privilege escalation.' },
+        { regex: /http:\/\/|https:\/\//, category: 'data_exfiltration', severity: 'medium', title: 'HTTP call', description: 'The skill makes an HTTP call, which could be used for data exfiltration.' },
+        ... 
+      ]
+
+    Then for each line, we check each pattern. If matched, we create a finding.
+
+    But note: we might get multiple matches in the same line? We can break after first match? Or we can have multiple findings for the same line? Let's do one finding per line per pattern? But if a line has both 'sudo' and 'http', we might create two findings? That's okay.
+
+    We'll loop through lines and for each pattern, if the line matches, we create a finding.
+
+    We'll also avoid duplicates? Not necessary.
+
+    Now, for the route:
+
+      We are going to handle POST.
+
+      Steps:
+
+        1. Get the user from the request (using the Supabase server client, we can get the user from the request? The createClient from server.ts uses cookies. We are in a server route, so we can get the user from the request? Actually, the createClient from server.ts is for server components and route handlers. It uses the cookies from the request.
+
+        How do we get the user? We can do:
+
+          const supabase = createClient()
+          const { data: { user } } = await supabase.auth.getUser()
+
+        But note: the createClient from server.ts is designed for server components and uses the cookies from the request. In a route handler, we can use the same function and it will get the cookies from the request? Actually, the createClient in server.ts uses `cookies()` from 'next/headers', which in a route handler will get the cookies from the request.
+
+        So we can do:
+
+          const supabase = createClient()
+          const { data: { user } } = await supabase.auth.getUser()
+
+        If there's no user, return 401.
+
+        2. Parse the form data:
+
+          const formData = await request.formData()
+          const file = formData.get('file') as File
+          const name = formData.get('name') as string
+
+        3. Read the file:
+
+          const text = await file.text()
+
+        4. Create the skill:
+
+          const { data: skill, error: skillError } = await supabase
+            .from('skills')
+            .insert({
+              user_id: user.id,
+              name: name,
+              description: '', // we don't have it
+              content: text,
+              file_path: '' // we are not storing the file in storage
+            })
+            .select()
+            .single()
+
+          If error, return 500.
+
+        5. Create the scan:
+
+          const { data: scan, error: scanError } = await supabase
+            .from('scans')
+            .insert({
+              skill_id: skill.id,
+              status: 'scanning',
+              started_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+
+        6. Run the analysis on `text` and get an array of findings (with category, severity, title, description, line_number, code_snippet, confidence?).
+
+          We'll set confidence to 1 for now (100%) because we are matching exact patterns? Or we can set to 0.9? Let's set to 1.
+
+        7. Insert the findings:
+
+          const findings = analysisResult.map(finding => ({
+            scan_id: scan.id,
+            skill_id: skill.id,
+            category: finding.category,
+            severity: finding.severity,
+            title: finding.title,
+            description: finding.description,
+            line_number: finding.lineNumber,
+            code_snippet: finding.codeSnippet,
+            confidence: 1,
+            created_at: new Date().toISOString()
+          }))
+
+          Then insert into 'findings' table.
+
+        8. Update the scan to completed:
+
+          await supabase
+            .from('scans')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            })
+            .eq('id', scan.id)
+
+        9. Return the scan with findings? We can return:
+
+          {
+            scan: {
+              ...scan,
+              skill: skill,
+              findings: findings
+            }
+          }
+
+        But note: the ScanWithDetails type expects findings array. We can return that.
+
+        Alternatively, we can return the scan id and let the client fetch? But we have the data.
+
+        We'll return the scan with details.
+
+      However, note that the analysis might take time and we are doing it in the request. We might hit the timeout. We can do:
+
+        - Create the skill and scan with status 'pending'
+        - Then do the analysis and update the scan and insert findings in the same request? That's what we are doing.
+
+        But if the analysis is heavy, we might want to do it in the background. But for now, we'll do it in the request.
+
+      We'll also handle errors:
+
+        If any step fails, we should rollback? We can use transactions? But Supabase doesn't support transactions in the same way? We can use the Postgres transaction via supabase.rpc? Or we can do:
+
+          We are inserting skill, then scan, then findings, then update scan.
+
+          If any fails, we should delete the skill and scan? Or we can leave them? We don't want partial data.
+
+        We can use a transaction by using the `supabase` client's `from('...').insert()` and then if any error, we try to delete the skill and scan? That's messy.
+
+        Alternatively, we can do:
+
+          Step 1: create skill.
+          Step 2: create scan.
+          Step 3: if analysis fails, update scan with error and status 'failed'.
+
+        But if the analysis fails, we don't have findings. We can set the scan status to 'failed' and set error_message.
+
+        We'll do:
+
+          try {
+            // create skill
+            // create scan
+            // run analysis
+            // insert findings
+            // update scan to completed
+          } catch (error) {
+            // update scan to failed and set error_message
+            // then return error
+          }
+
+        But note: if the skill creation fails, we don't have a scan. So we need to handle each step.
+
+        Let's structure:
+
+          let skillId: string | null = null
+          let scanId: string | null = null
+
+          try {
+            const { data: skill, error: skillError } = await supabase.from('skills').insert(...).select().single()
+            if (skillError) throw skillError
+            skillId = skill.id
+
+            const { data: scan, error: scanError } = await supabase.from('scans').insert(...).select().single()
+            if (scanError) throw scanError
+            scanId = scan.id
+
+            const findings = await analyze(text) // this returns an array of finding objects (without scan_id, skill_id, etc.)
+
+            // Now insert findings
+            const findingsToInsert = findings.map(f => ({
+              ...f,
+              scan_id: scanId,
+              skill_id: skillId,
+              created_at: new Date().toISOString()
+            }))
+
+            const { error: findingsError } = await supabase.from('findings').insert(findingsToInsert)
+            if (findingsError) throw findingsError
+
+            // Update scan to completed
+            await supabase.from('scans').update({
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            }).eq('id', scanId)
+
+            // Return the scan with details
+            const { data: scanWithDetails } = await supabase
+              .from('scans')
+              .select(`
+                *,
+                skill:skills(*),
+                findings:findings(*)
+              `)
+              .eq('id', scanId)
+              .single()
+
+            return NextResponse.json(scanWithDetails, { status: 200 })
+
+          } catch (error) {
+            // If we have a scanId, update the scan to failed
+            if (scanId) {
+              await supabase.from('scans').update({
+                status: 'failed',
+                error_message: error.message
+              }).eq('id', scanId)
+            }
+            // If we have a skillId, we might want to delete the skill? But then the scan references it. We can leave the skill? Or we can delete the skill and scan? 
+            // We'll leave the skill and scan (with failed status) so the user can see the error.
+            return NextResponse.json({ error: error.message }, { status: 500 })
+          }
+
+      But note: if the skill creation fails, we don't have a scan. So we just return the error.
+
+      Also, if the analysis function throws, we catch and set the scan to failed.
+
+    Now, the analysis function:
+
+      We'll write a function `analyze(content: string): Promise<Array<{category: FindingCategory, severity: SeverityLevel, title: string, description: string, lineNumber: number, codeSnippet: string}>>`
+
+      We'll define the patterns as above.
+
+      We'll split the content by newline and then for each line, check each pattern.
+
+      We'll return an array of findings.
+
+    We'll also consider that the same line might match multiple patterns? We can break after the first match? Or we can allow multiple? Let's allow multiple.
+
+    We'll do:
+
+      const patterns = [
+        {
+          regex: /sudo/,
+          category: 'privilege_escalation' as const,
+          severity: 'high' as const,
+          title: 'Use of sudo',
+          description: 'The skill uses sudo, which can lead to privilege escalation.'
+        },
+        {
+          regex: /http:\/\/|https:\/\//,
+          category: 'data_exfiltration' as const,
+          severity: 'medium' as const,
+          title: 'HTTP call',
+          description: 'The skill makes an HTTP call, which could be used for data exfiltration.'
+        },
+        {
+          regex: /process\.env|os\.getenv/,
+          category: 'data_exfiltration' as const,
+          severity: 'high' as const,
+          title: 'Environment variable access',
+          description: 'The skill accesses environment variables, which may contain sensitive information.'
+        },
+        {
+          regex: /writeFile|fs\.writeFile/,
+          category: 'data_exfiltration' as const,
+          severity: 'high' as const,
+          title: 'File write operation',
+          description: 'The skill writes to a file, which could be used for data exfiltration.'
+        },
+        {
+          regex: /curl|wget/,
+          category: 'data_exfiltration' as const,
+          severity: 'medium' as const,
+          title: 'Use of curl or wget',
+          description: 'The skill uses curl or wget, which can be used to exfiltrate data.'
+        }
+      ]
+
+      Then:
+
+        const findings = []
+        const lines = content.split('\n')
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]
+          for (const pattern of patterns) {
+            if (pattern.regex.test(line)) {
+              findings.push({
+                category: pattern.category,
+                severity: pattern.severity,
+                title: pattern.title,
+                description: pattern.description,
+                lineNumber: i + 1,
+                codeSnippet: line.trim()
+              })
+              // break? if we want only one finding per line? Let's break so we don't duplicate for the same line with multiple patterns? 
+              // But a line might have both 'sudo' and 'http'. We might want to report both? 
+              // Let's not break, so we can have multiple findings for the same line.
+            }
+          }
+        }
+
+        return findings
+
+    But note: the Finding interface also has an id, scan_id, skill_id, created_at. We'll add those when inserting.
+
+    Also, the confidence? We set to 1.
+
+    Now, for the route, we are only handling POST? The requirement says to handle GET, POST, PUT, DELETE. But for this route, we are only doing POST. We can:
+
+      GET: return 405 or maybe return the user's scans? But that's not the purpose of this route.
+
+      PUT: update a scan? Not needed.
+
+      DELETE: delete a scan? Not needed.
+
+    So we can:
+
+      if (request.method !== 'POST') {
+        return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+      }
+
+    But the requirement says to handle appropriate HTTP methods. We are only implementing POST.
+
+    Alternatively, we can implement:
+
+      GET: get the scan by id? But the route doesn't have an id. We can use query parameter? But the requirement says to handle appropriate methods. We can leave GET as 501.
+
+    Let's stick to POST only.
+
+    Now, let's code the route.
+
+    We'll also need to handle the case when the user is not authenticated.
+
+    Steps:
+
+      - Check the user. If no user, return 401.
+
+    Let's code accordingly.
+
+    We'll also set the content type? We are returning JSON.
+
+    We'll use:
+
+      import { NextRequest, NextResponse } from 'next/server'
+
+    And then:
+
+      export async function POST(request: NextRequest) {
+        // ... 
+      }
+
+    We are not handling other methods.
+
+    But the requirement says to handle appropriate HTTP methods. We can also handle:
+
+      GET: maybe return a message? Or 501.
+
+    Let's do:
+
+      export async function GET(request: NextRequest) {
+        return NextResponse.json({ message: 'Use POST to upload a file' }, { status: 200 })
+      }
+
+    But that's not necessary. We can just let Next.js handle 405 for unsupported methods? Actually, if we only export POST, then GET will return 405 automatically? Not sure.
+
+    According to Next.js, if we export a function for a method, then that method is allowed. If we don't export a function for a method, then it returns 405.
+
+    So we can just export POST and let Next.js handle the rest.
+
+    But the requirement says to handle appropriate HTTP methods. We are only handling POST, so we are handling the appropriate method for this route.
+
+    Let's code the POST.
+
+    We'll also need to set a maximum file size? We can set in the request? Not in the route, but we can check the file size and reject if too big.
+
+    We'll skip that for now.
+
+    Let's code.
+
+    We'll also need to import the types? We are using the types from lib/types, but we are in an API route. We can import them if needed.
+
+    We are using:
+
+      FindingCategory, SeverityLevel
+
+    But we are defining the analysis function to return an array of objects with these types. We can import the types.
+
+    However, note that the analysis function is internal and we are not returning the exact Finding type because we don't have the id, etc. We'll map later.
+
+    We can define:
+
+      interface AnalysisFinding {
+        category: FindingCategory
+        severity: SeverityLevel
+        title: string
+        description: string
+        lineNumber: number
+        codeSnippet: string
+      }
+
+    But we can just use the Finding type and then add the scan_id and skill_id and created_at when inserting.
+
+    Alternatively, we can define the analysis function to return Partial<Finding> without the id, scan_id, skill_id, created_at.
+
+    Let's do:
+
+      type AnalysisFinding = Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>
+
+    But we don't have the Finding type in this file? We can import it.
+
+    We'll import:
+
+      import type { Finding, FindingCategory, SeverityLevel } from '@/lib/types'
+
+    But note: the Finding interface has confidence?: number. We are setting confidence to 1.
+
+    So we can do:
+
+      const analysisFindings: AnalysisFinding[] = ... 
+
+    Then when inserting, we map to:
+
+      {
+        ...analysisFinding,
+        scan_id: scanId,
+        skill_id: skillId,
+        confidence: 1,
+        created_at: new Date().toISOString()
+      }
+
+    But note: the Finding interface has an id (string) which is generated by the database. We don't set it.
+
+    So we are good.
+
+    Let's code.
+
+    We'll also need to handle the case when the formData doesn't have a file or name.
+
+    We'll validate:
+
+      if (!file) return NextResponse.json({ error: 'File is required' }, { status: 400 })
+      if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+
+    Now, let's write the code.
+
+    We'll also need to handle the case when the file is too big? We can check file.size and reject if > some limit (e.g., 1MB). But we don't have a requirement.
+
+    We'll skip.
+
+    Let's code the route.
+
+    We'll also note that the Supabase client might throw errors. We'll catch and return 500.
+
+    We'll also note that the analysis function might throw? We'll catch and set the scan to failed.
+
+    We'll do:
+
+      try {
+        // ... 
+      } catch (error) {
+        // ... 
+      }
+
+    Now, the code:
+
+    We are going to write the entire file.
+
+    Let's create the file: app/api/scan/file/route.ts
+
+    We'll write:
+
+      import { NextRequest, NextResponse } from 'next/server'
+      import { createClient } from '@/lib/supabase/server'
+      import type { Finding, FindingCategory, SeverityLevel } from '@/lib/types'
+
+      export async function POST(request: NextRequest) {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const formData = await request.formData()
+        const file = formData.get('file') as File | null
+        const name = formData.get('name') as string | null
+
+        if (!file || !name) {
+          return NextResponse.json({ error: 'File and name are required' }, { status: 400 })
+        }
+
+        const text = await file.text()
+
+        // Create skill
+        const { data: skill, error: skillError } = await supabase
+          .from('skills')
+          .insert({
+            user_id: user.id,
+            name: name,
+            description: '',
+            content: text,
+            file_path: ''
+          })
+          .select()
+          .single()
+
+        if (skillError) {
+          return NextResponse.json({ error: skillError.message }, { status: 500 })
+        }
+
+        // Create scan
+        const { data: scan, error: scanError } = await supabase
+          .from('scans')
+          .insert({
+            skill_id: skill.id,
+            status: 'scanning',
+            started_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (scanError) {
+          // If scan creation fails, we should delete the skill? Or leave it? We'll leave it and return error.
+          return NextResponse.json({ error: scanError.message }, { status: 500 })
+        }
+
+        try {
+          const analysisFindings = analyze(text)
+
+          // Insert findings
+          const findingsToInsert = analysisFindings.map(f => ({
+            ...f,
+            scan_id: scan.id,
+            skill_id: skill.id,
+            confidence: 1,
+            created_at: new Date().toISOString()
+          }))
+
+          const { error: findingsError } = await supabase.from('findings').insert(findingsToInsert)
+          if (findingsError) {
+            throw findingsError
+          }
+
+          // Update scan to completed
+          await supabase
+            .from('scans')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            })
+            .eq('id', scan.id)
+
+          // Fetch the scan with details
+          const { data: scanWithDetails } = await supabase
+            .from('scans')
+            .select(`
+              *,
+              skill:skills(*),
+              findings:findings(*)
+            `)
+            .eq('id', scan.id)
+            .single()
+
+          return NextResponse.json(scanWithDetails, { status: 200 })
+
+        } catch (error: any) {
+          // Update scan to failed
+          await supabase
+            .from('scans')
+            .update({
+              status: 'failed',
+              error_message: error.message
+            })
+            .eq('id', scan.id)
+
+          return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+      }
+
+      function analyze(content: string): Array<Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>> {
+        const patterns = [
+          {
+            regex: /sudo/,
+            category: 'privilege_escalation' as const,
+            severity: 'high' as const,
+            title: 'Use of sudo',
+            description: 'The skill uses sudo, which can lead to privilege escalation.'
+          },
+          {
+            regex: /http:\/\/|https:\/\//,
+            category: 'data_exfiltration' as const,
+            severity: 'medium' as const,
+            title: 'HTTP call',
+            description: 'The skill makes an HTTP call, which could be used for data exfiltration.'
+          },
+          {
+            regex: /process\.env|os\.getenv/,
+            category: 'data_exfiltration' as const,
+            severity: 'high' as const,
+            title: 'Environment variable access',
+            description: 'The skill accesses environment variables, which may contain sensitive information.'
+          },
+          {
+            regex: /writeFile|fs\.writeFile/,
+            category: 'data_exfiltration' as const,
+            severity: 'high' as const,
+            title: 'File write operation',
+            description: 'The skill writes to a file, which could be used for data exfiltration.'
+          },
+          {
+            regex: /curl|wget/,
+            category: 'data_exfiltration' as const,
+            severity: 'medium' as const,
+            title: 'Use of curl or wget',
+            description: 'The skill uses curl or wget, which can be used to exfiltrate data.'
+          }
+        ]
+
+        const lines = content.split('\n')
+        const findings: Array<Omit<Finding, 'id' | 'scan_id' | 'skill_id' | 'created_at'>> = []
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]
+          for (const pattern of patterns) {
+            if (pattern.regex.test(line)) {
+              findings.push({
+                category: pattern.category,
+                severity: pattern.severity,
+                title: pattern.title,
+                description: pattern.description,
+                line_number: i + 1,
+                code_snippet: line.trim(),
+                confidence: 1
+              })
+            }
+          }
+        }
+
+        return findings
+      }
+
+    But note: the Finding interface has `confidence?: number`. We are setting it to 1.
+
+    Also, the line_number is optional? In the interface it's `line_number?: number`. We are setting it.
+
+    And code_snippet is optional? We are setting it.
+
+    We are not setting the `id` because that's generated by the database.
+
+    Now, we are returning the scanWithDetails which should match the ScanWithDetails type.
+
+    But note: the ScanWithDetails type expects:
+
+      findings: Finding[]
+
+    And we are inserting findings with the required fields.
+
+    We are good.
+
+    However, note that the analysis function might return an empty array.
+
+    Also, we are not handling the case when the file is empty? That's okay.
+
+    Let's test the regex:
+
+      /sudo/ will match 'sudo' anywhere in the line.
+
+      /http:\/\/|https:\/\// will match http:// or https://
+
+      /process\.env|os\.getenv/ will match process.env or os.getenv
+
+      /writeFile|fs\.writeFile/ will match writeFile or fs.writeFile
+
+      /curl|wget/ will match curl or wget
+
+    This is a simple static analysis. It might have false positives and false negatives.
+
+    We are also not checking for the context (like inside a string or comment). But for now, it's okay.
+
+    Now, we are done.
+
+    But wait: the requirement says to handle GET, POST, PUT, DELETE. We are only handling POST. We can leave GET, PUT, DELETE as 405 by not exporting them.
+
+    Alternatively, we can export:
+
+      export async function GET() {
+        return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+      }
+
+    But Next.js will automatically return 405 if we don't export the function for that method.
+
+    So we are good.
+
+    Let's write the file.
+
+    One more thing: the route is for a single file. We are not handling multiple files.
+
+    We are done.
+
+    However, note that the form in app/scan/file/page.tsx might be sending the file as 'file' and 'name'. We are using that.
+
+    Let's write the code.
+
+    We'll also note that the Supabase client might throw an error if the user is not authenticated? We are checking user.
+
+    We are using `supabase.auth.getUser()` which returns the user from the request.
+
+    We are good.
+
+    Now, the code:
+
+    We'll write the entire file.
+
+    But note: the file is currently empty. We are creating it.
+
+    We'll write:
+
+      app/api/scan/file/route.ts
+
+    with the code above.
+
+    Let's format.
+
+    We'll also note that the analysis function is inside the same file. We can move it to a separate utility, but for now, we'll keep it here.
+
+    We are done.
+
+    However, note that the requirement says to use the types from lib/types.ts. We are importing them.
+
+    We are also using the createClient from lib/supabase/server.
+
+    We are good.
+
+    Let's output the file.
+
+------------
+► **ANSWER**
+
+Looking at the requirements, I need to build an API route for handling single file uploads and static analysis. The route should:
+
+1. Handle POST requests for file uploads
+2. Use Supabase server client
+3. Validate input
+4. Perform static analysis for suspicious patterns
+5. Store results in database
+6. Return proper JSON responses
+
+Here's the implementation:
+
+app/api/scan/file/route.ts
+```
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import type { Finding, FindingCategory, SeverityLevel, Scan, Skill } from '@/lib/types'
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = createClient()
+    
+    // Get authenticated user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Parse form data
+    const formData = await request.formData()
+    const file = formData.get('file') as File | null
+    const name = formData.get('name') as string | null
+    const description = formData.get('description') as string | null
+
+    // Validate input
+    if (!file) {
+      return NextResponse.json(
+        { error: 'File is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!name || name.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Skill name is required' },
+        { status: 400 }
+      )
+    }
+
+    // Read file content
+    const content = await file.text()
+    if (content.length === 0) {
+      return NextResponse.json(
+        { error: 'File is empty' },
+        { status: 400 }
+      )
+    }
+
+    // Create skill record
+    const { data: skill, error: skillError } = await supabase
+      .from('skills')
+      .insert({
+        user_id: user.id,
+        name: name.trim(),
+        description: description?.trim() || null,
+        content,
+        file_path: null // We're storing content directly, not in storage
+      })
+      .select()
+      .single()
+
+    if (skillError) {
+      return NextResponse.json(
+        { error: 'Failed to create skill', details: skillError.message },
+        { status: 500 }
+      )
+    }
+
+    // Create scan record
+    const { data: scan, error: scanError } = await supabase
+      .from('scans')
+      .insert({
+        skill_id: skill.id,
+        status: 'scanning',
+        started_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (scanError) {
+      // Clean up skill if scan creation fails
+      await supabase.from('skills').delete().eq('id', skill.id)
+      return NextResponse.json(
+        { error: 'Failed to create scan', details: scanError.message },
+        { status: 500 }
+      )
+    }
+
+    // Perform static analysis
+    const findings = analyzeSkillContent(content, skill.id, scan.id)
+
+    // Insert findings
+    if (findings.length > 0) {
+      const { error: findingsError } = await supabase
+        .from('findings')
+        .insert(findings)
+
+      if (findingsError) {
+        // Update scan with error but don't fail the whole request
+        await supabase
+          .from('scans')
+          .update({
+            status: 'failed',
+            error_message: 'Failed to save findings: ' + findingsError.message,
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', scan.id)
+      }
+    }
+
+    // Update scan status to completed
+    await supabase
+      .from('scans')
+      .update({
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      })
+      .eq('id', scan.id)
+
+    // Return scan with details
+    const { data: scanWithDetails } = await supabase
+      .from('scans')
+      .select(`
+        *,
+        skill:skills(*),
+        findings:findings(*)
+      `)
+      .eq('id', scan.id)
+      .single()
+
+    return NextResponse.json(
+      scanWithDetails,
+      { status: 200 }
+    )
+
+  } catch (error) {
+    console.error('Scan file error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+function analyzeSkillContent(
+  content: string, 
+  skillId: string, 
+  scanId: string
+): Omit<Finding, 'id' | 'created_at'>[] {
+  const findings: Omit<Finding, 'id' | 'created_at'>[] = []
+  const lines = content.split('\n')
+  
+  // Patterns to detect
+  const patterns = [
+    // Data exfiltration patterns
+    {
+      regex: /(https?:\/\/|fetch\(|axios\.|curl\s+|wget\s+)/i,
+      category: 'data_exfiltration' as FindingCategory,
+      severity: 'medium' as SeverityLevel,
+      title: 'Network communication detected',
+      description: 'The skill contains network calls which could be used for data exfiltration.'
+    },
+    {
+      regex: /(process\.env|os\.getenv|getenv\()/i,
+      category: 'data_exfiltration' as FindingCategory,
+      severity: 'high' as SeverityLevel,
+      title: 'Environment variable access',
+      description: 'The skill accesses environment variables which may contain sensitive information.'
+    },
+    {
+      regex: /(writeFile|fs\.writeFile|open\s*\(.*['"]w|>\s*[^>]+)/i,
+      category: 'data_exfiltration' as FindingCategory,
+      severity: 'high' as SeverityLevel,
+      title: 'File write operation',
+      description: 'The skill writes to files which could be used to exfiltrate data.'
+    },
+    // Privilege escalation patterns
+    {
+      regex: /(sudo\s+|su\s+|\$\(|\`)/i,
+      category: 'privilege_escalation' as FindingCategory,
+      severity: 'high' as SeverityLevel,
+      title: 'Privilege escalation attempt',
+      description: 'The skill uses sudo, su, or command substitution which could lead to privilege escalation.'
+    },
+    {
+      regex: /(chmod\s+|chown\s+|setuid|setgid)/i,
+      category: 'privilege_escalation' as FindingCategory,
+      severity: 'high' as SeverityLevel,
+      title: 'Permission modification',
+      description: 'The skill modifies file permissions which could be used for privilege escalation.'
+    },
+    // Behavior mismatch patterns (basic heuristics)
+    {
+      regex: /(rm\s+-rf|dd\s+|mkfs|format\s+)/i,
+      category: 'behavior_mismatch' as FindingCategory,
+      severity: 'critical' as SeverityLevel,
+      title: 'Destructive operation',
+      description: 'The skill contains potentially destructive commands that may not match a typical skill description.'
+    },
+    {
+      regex: /(nc\s+-[el]|netcat\s+-[el]|socat\s+)/i,
+      category: 'behavior_mismatch' as FindingCategory,
+      severity: 'high' as SeverityLevel,
+      title: 'Network listener',
+      description: 'The skill sets up network listeners which may indicate unexpected behavior.'
+    }
+  ]
+
+  // Check each line for patterns
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    for (const pattern of patterns) {
+      if (pattern.regex.test(line)) {
+        findings.push({
+          scan_id: scanId,
+          skill_id: skillId,
+          category: pattern.category,
+          severity: pattern.severity,
+          title: pattern.title,
+          description: pattern.description,
+          line_number: i + 1,
+          code_snippet: line.length > 100 ? line.substring(0, 100) + '...' : line,
+          confidence: 0.9 // High confidence for exact pattern matches
+        })
+      }
+    }
+  }
+
+  return findings
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method not allowed. Use POST to upload a file.' },
+    { status: 405 }
+  )
+}
+
+export async function PUT() {
+  return NextResponse.json(
+    { error: 'Method not allowed' },
+    { status: 405 }
+  )
+}
+
+export async function DELETE() {
+  return NextResponse.json(
+    { error: 'Method not allowed' },
+    { status: 405 }
+  )
+}
+```
+Tokens: 3.3k sent, 10k received.
+Applied edit to app/api/scan/file/route.ts
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+summarizer unexpectedly failed for all models
+[20:04:18]   [7/10] Done (7334 bytes)
