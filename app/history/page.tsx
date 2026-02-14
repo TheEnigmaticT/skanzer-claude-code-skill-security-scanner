@@ -248,8 +248,8 @@ export default function HistoryPage() {
 
               return (
                 <div key={scan.id} className="bg-brand-surface border border-brand-border p-6">
-                  <div className="flex justify-between items-start">
-                    <div>
+                  <div className="flex flex-wrap justify-between items-start gap-2">
+                    <div className="min-w-0">
                       <h3 className="font-mono text-base font-bold text-brand-text">
                         <Link
                           href={`/scans/${scan.id}`}
@@ -265,7 +265,7 @@ export default function HistoryPage() {
                         )}
                       </p>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
                         scan.status === 'completed'
                           ? 'bg-green-100 text-green-800'

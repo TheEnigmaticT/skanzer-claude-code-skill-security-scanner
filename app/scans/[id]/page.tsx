@@ -162,8 +162,8 @@ export default async function ScanDetailPage({ params }: PageProps) {
                 <div className="p-6 space-y-4">
                   {findings.map(finding => (
                     <div key={finding.id} className="border border-brand-border p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <h3 className="font-mono text-sm font-bold text-brand-text">
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                        <h3 className="font-mono text-sm font-bold text-brand-text min-w-0">
                           {finding.title}
                         </h3>
                         <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium ${getSeverityColor(finding.severity)}`}>

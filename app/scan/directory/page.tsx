@@ -219,8 +219,8 @@ export default function DirectoryScanPage() {
               <div className="space-y-4">
                 {scans.map(scan => (
                   <div key={scan.id} className="border border-brand-border p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
+                    <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
+                      <div className="min-w-0">
                         <h3 className="font-mono text-base font-bold text-brand-text">{scan.skill.name}</h3>
                         <p className="text-sm text-brand-muted">
                           Started: {new Date(scan.started_at).toLocaleString()}
@@ -254,8 +254,8 @@ export default function DirectoryScanPage() {
                                           finding.severity === 'high' ? '#f97316' :
                                           finding.severity === 'medium' ? '#eab308' : '#22c55e'
                             }}>
-                              <div className="flex justify-between items-start">
-                                <span className="font-medium text-brand-text">{finding.title}</span>
+                              <div className="flex flex-wrap justify-between items-start gap-2">
+                                <span className="font-medium text-brand-text min-w-0">{finding.title}</span>
                                 <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                                   finding.severity === 'critical' ? 'bg-red-100 text-red-800' :
                                   finding.severity === 'high' ? 'bg-orange-100 text-orange-800' :
