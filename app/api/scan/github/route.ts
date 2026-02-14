@@ -4,6 +4,8 @@ import { getFileContent } from '@/lib/github'
 import { analyzeSkillContent } from '@/lib/analyze'
 import type { ScanWithDetails } from '@/lib/types'
 
+export const maxDuration = 30
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -29,103 +31,84 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const scanIds: string[] = []
-
-    for (const filePath of files) {
-      // Derive skill name from filename (sans .md)
-      const name = filePath.split('/').pop()?.replace(/\.md$/i, '') || filePath
-
-      let content: string
-      try {
-        content = await getFileContent(owner, repo, filePath)
-      } catch (err) {
-        // Create a failed skill/scan entry for this file
-        const { data: skill } = await supabase
-          .from('skills')
-          .insert({
-            user_id: user.id,
-            name,
-            content: '',
-            file_path: `github:${owner}/${repo}/${filePath}`,
-          })
-          .select()
-          .single()
-
-        if (skill) {
-          const { data: scan } = await supabase
-            .from('scans')
-            .insert({
-              skill_id: skill.id,
-              status: 'failed',
-              started_at: new Date().toISOString(),
-              completed_at: new Date().toISOString(),
-              error_message: err instanceof Error ? err.message : 'Failed to fetch file',
-            })
-            .select()
-            .single()
-          if (scan) scanIds.push(scan.id)
+    // Fetch all file contents from GitHub in parallel
+    const fileResults = await Promise.all(
+      files.map(async (filePath) => {
+        const name = filePath.split('/').pop()?.replace(/\.md$/i, '') || filePath
+        try {
+          const content = await getFileContent(owner, repo, filePath)
+          return { filePath, name, content, error: null }
+        } catch (err) {
+          return { filePath, name, content: null, error: err instanceof Error ? err.message : 'Failed to fetch file' }
         }
-        continue
-      }
+      })
+    )
 
-      // Create skill record
-      const { data: skill, error: skillError } = await supabase
-        .from('skills')
-        .insert({
-          user_id: user.id,
-          name,
-          content,
-          file_path: `github:${owner}/${repo}/${filePath}`,
-        })
-        .select()
-        .single()
+    // Create all skill records in one batch
+    const skillInserts = fileResults.map(r => ({
+      user_id: user.id,
+      name: r.name,
+      content: r.content || '',
+      file_path: `github:${owner}/${repo}/${r.filePath}`,
+    }))
 
-      if (skillError || !skill) {
-        console.error(`Failed to create skill for ${filePath}:`, skillError)
-        continue
-      }
+    const { data: skills, error: skillsError } = await supabase
+      .from('skills')
+      .insert(skillInserts)
+      .select()
 
-      // Create scan record
-      const { data: scan, error: scanError } = await supabase
-        .from('scans')
-        .insert({
-          skill_id: skill.id,
-          status: 'scanning',
-          started_at: new Date().toISOString(),
-        })
-        .select()
-        .single()
+    if (skillsError || !skills) {
+      return NextResponse.json(
+        { error: 'Failed to create skill records', details: skillsError?.message },
+        { status: 500 }
+      )
+    }
 
-      if (scanError || !scan) {
-        console.error(`Failed to create scan for ${filePath}:`, scanError)
-        continue
-      }
+    // Create all scan records in one batch
+    const scanInserts = skills.map((skill, i) => ({
+      skill_id: skill.id,
+      status: fileResults[i].error ? 'failed' as const : 'scanning' as const,
+      started_at: new Date().toISOString(),
+      ...(fileResults[i].error ? {
+        completed_at: new Date().toISOString(),
+        error_message: fileResults[i].error,
+      } : {}),
+    }))
+
+    const { data: scans, error: scansError } = await supabase
+      .from('scans')
+      .insert(scanInserts)
+      .select()
+
+    if (scansError || !scans) {
+      return NextResponse.json(
+        { error: 'Failed to create scan records', details: scansError?.message },
+        { status: 500 }
+      )
+    }
+
+    // Analyze and insert findings for files that were fetched successfully
+    const analyzePromises = scans.map(async (scan, i) => {
+      if (scan.status === 'failed') return
+
+      const content = fileResults[i].content!
+      const skill = skills[i]
 
       try {
-        // Analyze content
         const findings = analyzeSkillContent(content, skill.id, scan.id)
 
-        // Insert findings
         if (findings.length > 0) {
           const { error: findingsError } = await supabase
             .from('findings')
             .insert(findings)
-
           if (findingsError) throw findingsError
         }
 
-        // Mark completed
         await supabase
           .from('scans')
-          .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-          })
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
           .eq('id', scan.id)
-
-        scanIds.push(scan.id)
       } catch (error) {
-        // Mark failed
         await supabase
           .from('scans')
           .update({
@@ -134,10 +117,10 @@ export async function POST(request: NextRequest) {
             completed_at: new Date().toISOString(),
           })
           .eq('id', scan.id)
-
-        scanIds.push(scan.id)
       }
-    }
+    })
+
+    await Promise.all(analyzePromises)
 
     // Fetch all scans with details
     const { data: scansWithDetails } = await supabase
@@ -147,7 +130,7 @@ export async function POST(request: NextRequest) {
         skill:skills(*),
         findings:findings(*)
       `)
-      .in('id', scanIds)
+      .in('id', scans.map(s => s.id))
       .order('started_at', { ascending: false })
 
     return NextResponse.json({
