@@ -28,6 +28,7 @@ export default function GitHubScanPage() {
   const [scanning, setScanning] = useState(false)
   const [scanProgress, setScanProgress] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
 
   const handleFetchFiles = async () => {
     setLoading(true)
@@ -364,6 +365,84 @@ export default function GitHubScanPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Badge Embed Section */}
+                {(() => {
+                  // Pick the scan with worst findings for the repo-level badge
+                  const completedScans = scans.filter(s => s.status === 'completed')
+                  if (completedScans.length === 0) return null
+
+                  const severityRank = { critical: 4, high: 3, medium: 2, low: 1 }
+                  const worstScan = completedScans.reduce((worst, scan) => {
+                    const worstSev = Math.max(0, ...(scan.findings || []).map(f => severityRank[f.severity] || 0))
+                    const currentWorstSev = Math.max(0, ...(worst.findings || []).map(f => severityRank[f.severity] || 0))
+                    return worstSev > currentWorstSev ? scan : worst
+                  }, completedScans[0])
+
+                  const badgeUrl = `${window.location.origin}/api/badge/${worstScan.id}`
+                  const repoName = repoInfo ? `${repoInfo.owner}/${repoInfo.repo}` : 'repo'
+                  const mdSnippet = `![Skanzer Security Scan](${badgeUrl})`
+                  const htmlSnippet = `<img src="${badgeUrl}" alt="Skanzer Security Scan for ${repoName}">`
+
+                  const copyToClipboard = (text: string, label: string) => {
+                    navigator.clipboard.writeText(text)
+                    setCopied(label)
+                    setTimeout(() => setCopied(null), 2000)
+                  }
+
+                  return (
+                    <div className="bg-white shadow rounded-lg">
+                      <div className="px-4 py-5 sm:p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Embed Badge</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Add this badge to your repository README to show its security scan status.
+                        </p>
+
+                        {/* Badge Preview */}
+                        <div className="mb-6 p-4 bg-gray-50 rounded-lg flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={badgeUrl}
+                            alt={`Skanzer Security Scan for ${repoName}`}
+                            height={20}
+                          />
+                        </div>
+
+                        {/* Markdown Snippet */}
+                        <div className="mb-4">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-sm font-medium text-gray-700">Markdown</label>
+                            <button
+                              onClick={() => copyToClipboard(mdSnippet, 'markdown')}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              {copied === 'markdown' ? 'Copied!' : 'Copy'}
+                            </button>
+                          </div>
+                          <pre className="text-xs bg-gray-100 p-3 rounded overflow-x-auto select-all">
+                            <code>{mdSnippet}</code>
+                          </pre>
+                        </div>
+
+                        {/* HTML Snippet */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-sm font-medium text-gray-700">HTML</label>
+                            <button
+                              onClick={() => copyToClipboard(htmlSnippet, 'html')}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              {copied === 'html' ? 'Copied!' : 'Copy'}
+                            </button>
+                          </div>
+                          <pre className="text-xs bg-gray-100 p-3 rounded overflow-x-auto select-all">
+                            <code>{htmlSnippet}</code>
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </>
             )}
 
