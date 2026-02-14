@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { getFileContent } from '@/lib/github'
+import { getFilesContent } from '@/lib/github'
 import { analyzeSkillContent } from '@/lib/analyze'
 import type { ScanWithDetails } from '@/lib/types'
 
-export const maxDuration = 30
+export const maxDuration = 60
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,9 +20,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { owner, repo, files } = body as {
+    const { owner, repo, branch, files } = body as {
       owner: string
       repo: string
+      branch?: string
       files: string[]
     }
 
@@ -33,37 +34,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch all file contents from GitHub in parallel
-    const fileResults = await Promise.all(
-      files.map(async (filePath) => {
-        const name = filePath.split('/').pop()?.replace(/\.md$/i, '') || filePath
-        try {
-          const content = await getFileContent(owner, repo, filePath)
-          return { filePath, name, content, error: null }
-        } catch (err) {
-          return { filePath, name, content: null, error: err instanceof Error ? err.message : 'Failed to fetch file' }
-        }
-      })
-    )
+    // Fetch all file contents with concurrency control (10 at a time via raw.githubusercontent.com)
+    const fileContents = await getFilesContent(owner, repo, files, branch, 10)
 
     // Process each file: create skill, scan, analyze, insert findings
     const scanIds: string[] = []
 
-    for (const result of fileResults) {
+    for (const filePath of files) {
+      const result = fileContents.get(filePath)!
+      const name = filePath.split('/').pop()?.replace(/\.md$/i, '') || filePath
+
       // Create skill record
       const { data: skill, error: skillError } = await admin
         .from('skills')
         .insert({
           user_id: user.id,
-          name: result.name,
+          name,
           content: result.content || '',
-          file_path: `github:${owner}/${repo}/${result.filePath}`,
+          file_path: `github:${owner}/${repo}/${filePath}`,
         })
         .select()
         .single()
 
       if (skillError || !skill) {
-        console.error(`Failed to create skill for ${result.filePath}:`, skillError)
+        console.error(`Failed to create skill for ${filePath}:`, skillError)
         continue
       }
 
@@ -96,7 +90,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (scanError || !scan) {
-        console.error(`Failed to create scan for ${result.filePath}:`, scanError)
+        console.error(`Failed to create scan for ${filePath}:`, scanError)
         continue
       }
 
@@ -129,7 +123,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch all scans with details (use admin to ensure we get everything)
+    // Fetch all scans with details
     const { data: scansWithDetails } = await admin
       .from('scans')
       .select(`

@@ -73,6 +73,7 @@ export default function GitHubScanPage() {
         body: JSON.stringify({
           owner: repoInfo.owner,
           repo: repoInfo.repo,
+          branch: repoInfo.branch,
           files: selectedFiles,
         }),
       })
