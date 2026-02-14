@@ -147,13 +147,13 @@ export default function GitHubScanPage() {
           <div className="bg-brand-surface border border-brand-border">
             <div className="px-4 py-5 sm:p-6">
               <h2 className="font-mono text-lg font-bold text-brand-text mb-4">Repository URL</h2>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   type="text"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://github.com/owner/repo"
-                  className="flex-1 border border-brand-border px-3 py-2 text-sm focus:border-brand-accent focus:outline-none"
+                  className="flex-1 min-w-0 border border-brand-border px-3 py-2 text-sm focus:border-brand-accent focus:outline-none"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && url.trim()) handleFetchFiles()
                   }}
@@ -161,7 +161,7 @@ export default function GitHubScanPage() {
                 <button
                   onClick={handleFetchFiles}
                   disabled={!url.trim() || loading}
-                  className="inline-flex items-center px-4 py-2 border border-transparent font-mono text-sm font-bold text-white bg-brand-accent hover:bg-brand-accent-hover focus:border-brand-accent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="self-start items-center px-4 py-2 border border-transparent font-mono text-sm font-bold text-white bg-brand-accent hover:bg-brand-accent-hover focus:border-brand-accent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Fetching...' : 'Fetch Files'}
                 </button>
