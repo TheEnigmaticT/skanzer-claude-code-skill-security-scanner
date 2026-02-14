@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import { Skill, Scan, Finding, ScanWithDetails, SeverityLevel, FindingCategory } from '@/lib/types'
+import AppNav from '@/app/components/app-nav'
 
 export default function DirectoryScanPage() {
   const supabase = createClient()
@@ -121,6 +122,7 @@ export default function DirectoryScanPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <AppNav />
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Directory Scan</h1>

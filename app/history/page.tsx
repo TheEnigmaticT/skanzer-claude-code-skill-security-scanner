@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ScanWithDetails, SeverityLevel, FindingCategory } from '@/lib/types'
 import Link from 'next/link'
+import AppNav from '@/app/components/app-nav'
 
 export default function HistoryPage() {
   const [scans, setScans] = useState<ScanWithDetails[]>([])
@@ -131,8 +132,9 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50">
+      <AppNav />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Scan History</h1>
           <p className="mt-2 text-gray-600">

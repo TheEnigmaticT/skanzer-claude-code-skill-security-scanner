@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import AppNav from '@/app/components/app-nav'
 
 export default function UploadSkillFilePage() {
   const [file, setFile] = useState<File | null>(null)
@@ -87,7 +88,9 @@ export default function UploadSkillFilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50">
+      <AppNav />
+      <div className="py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Upload Skill File</h1>
@@ -208,6 +211,7 @@ export default function UploadSkillFilePage() {
             <li>Privilege escalation (sudo, dangerous bash commands)</li>
           </ul>
         </div>
+      </div>
       </div>
     </div>
   )

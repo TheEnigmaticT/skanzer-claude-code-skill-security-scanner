@@ -14749,3 +14749,5 @@ Summarization failed for model openai/botty-step-flash: cannot schedule new futu
 Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
 summarizer unexpectedly failed for all models
 [20:08:34]   [10/10] Done (4788 bytes)
+[20:08:35]   Step 3e: Fix pass...
+[20:08:38]   Build failed (fix attempt 1/3)

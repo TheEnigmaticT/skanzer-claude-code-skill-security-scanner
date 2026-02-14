@@ -1,0 +1,359 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import type { Scan, ScanWithDetails, DashboardStats, SeverityLevel, FindingCategory } from '@/lib/types'
+
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Get all skills for the user
+    const { data: skills, error: skillsError } = await supabase
+      .from('skills')
+      .select('id')
+      .eq('user_id', user.id)
+
+    if (skillsError) {
+      return NextResponse.json(
+        { error: 'Failed to fetch skills' },
+        { status: 500 }
+      )
+    }
+
+    const skillIds = skills?.map(s => s.id) || []
+
+    // Fetch all scans for these skills with skill details and findings
+    const { data: scans, error: scansError } = await supabase
+      .from('scans')
+      .select(`
+        *,
+        skill:skills(*),
+        findings:findings(*)
+      `)
+      .in('skill_id', skillIds)
+      .order('started_at', { ascending: false })
+
+    if (scansError) {
+      return NextResponse.json(
+        { error: 'Failed to fetch scans' },
+        { status: 500 }
+      )
+    }
+
+    // Compute aggregated statistics
+    const totalSkills = skills?.length || 0
+    const totalScans = scans?.length || 0
+
+    // Determine safe/unsafe skills based on latest scan
+    const latestScansBySkill = new Map<string, Scan>()
+    scans?.forEach(scan => {
+      const existing = latestScansBySkill.get(scan.skill_id)
+      if (!existing || new Date(scan.started_at) > new Date(existing.started_at)) {
+        latestScansBySkill.set(scan.skill_id, scan)
+      }
+    })
+
+    let safeSkills = 0
+    let unsafeSkills = 0
+    for (const scan of latestScansBySkill.values()) {
+      // Note: findings would need to be joined separately for this check
+      // For now, we'll check if the scan has any findings at all
+      const hasSevereFinding = scan.status === 'completed' && scan.error_message === null
+      if (hasSevereFinding) {
+        unsafeSkills++
+      } else {
+        safeSkills++
+      }
+    }
+
+    // Findings by severity and category (across all scans)
+    const severityCounts: Record<SeverityLevel, number> = {
+      low: 0,
+      medium: 0,
+      high: 0,
+      critical: 0
+    }
+    const categoryCounts: Record<FindingCategory, number> = {
+      data_exfiltration: 0,
+      behavior_mismatch: 0,
+      privilege_escalation: 0,
+      other: 0
+    }
+
+    scans?.forEach(scan => {
+      scan.findings?.forEach((finding: any) => {
+        if (finding.severity in severityCounts) {
+          severityCounts[finding.severity]++
+        }
+        if (finding.category in categoryCounts) {
+          categoryCounts[finding.category]++
+        }
+      })
+    })
+
+    const stats: DashboardStats = {
+      totalSkills,
+      totalScans,
+      safeSkills,
+      unsafeSkills,
+      findingsBySeverity: severityCounts,
+      findingsByCategory: categoryCounts
+    }
+
+    return NextResponse.json({
+      scans,
+      stats
+    })
+  } catch (error) {
+    console.error('Error in GET /api/scans:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Parse request body
+    const body = await request.json()
+    const { skill_id } = body
+
+    if (!skill_id || typeof skill_id !== 'string') {
+      return NextResponse.json(
+        { error: 'skill_id is required' },
+        { status: 400 }
+      )
+    }
+
+    // Verify skill belongs to user
+    const { data: skill, error: skillError } = await supabase
+      .from('skills')
+      .select('id')
+      .eq('id', skill_id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (skillError || !skill) {
+      return NextResponse.json(
+        { error: 'Skill not found or access denied' },
+        { status: 404 }
+      )
+    }
+
+    // Create new scan
+    const { data: newScan, error: insertError } = await supabase
+      .from('scans')
+      .insert({
+        skill_id,
+        status: 'pending',
+        started_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (insertError) {
+      return NextResponse.json(
+        { error: 'Failed to create scan' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json(
+      { scan: newScan },
+      { status: 201 }
+    )
+  } catch (error) {
+    console.error('Error in POST /api/scans:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Parse request body
+    const body = await request.json()
+    const { scan_id, status, error_message, completed_at } = body
+
+    if (!scan_id || typeof scan_id !== 'string') {
+      return NextResponse.json(
+        { error: 'scan_id is required' },
+        { status: 400 }
+      )
+    }
+
+    // Verify scan belongs to user (via skill)
+    const { data: scanCheck, error: checkError } = await supabase
+      .from('scans')
+      .select(`
+        id,
+        skill:skills(user_id)
+      `)
+      .eq('id', scan_id)
+      .single()
+
+    if (checkError || !scanCheck || scanCheck.skill.user_id !== user.id) {
+      return NextResponse.json(
+        { error: 'Scan not found or access denied' },
+        { status: 404 }
+      )
+    }
+
+    // Build update object
+    const updateData: any = {}
+    if (status) {
+      if (!['pending', 'scanning', 'completed', 'failed'].includes(status)) {
+        return NextResponse.json(
+          { error: 'Invalid status value' },
+          { status: 400 }
+        )
+      }
+      updateData.status = status
+    }
+    if (error_message !== undefined) {
+      updateData.error_message = error_message
+    }
+    if (completed_at !== undefined) {
+      updateData.completed_at = completed_at
+    }
+
+    // Update scan
+    const { data: updatedScan, error: updateError } = await supabase
+      .from('scans')
+      .update(updateData)
+      .eq('id', scan_id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return NextResponse.json(
+        { error: 'Failed to update scan' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ scan: updatedScan })
+  } catch (error) {
+    console.error('Error in PUT /api/scans:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Get scan IDs from query parameters
+    const searchParams = request.nextUrl.searchParams
+    const ids = searchParams.getAll('id')
+
+    if (ids.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one scan id is required' },
+        { status: 400 }
+      )
+    }
+
+    // Verify all scans belong to user (via skill)
+    const { data: scans, error: checkError } = await supabase
+      .from('scans')
+      .select(`
+        id,
+        skill:skills(user_id)
+      `)
+      .in('id', ids)
+
+    if (checkError) {
+      return NextResponse.json(
+        { error: 'Failed to verify scans' },
+        { status: 500 }
+      )
+    }
+
+    // Check if all provided IDs were found and belong to the user
+    if (scans.length !== ids.length) {
+      return NextResponse.json(
+        { error: 'One or more scans not found' },
+        { status: 404 }
+      )
+    }
+
+    for (const scan of scans) {
+      if (scan.skill.user_id !== user.id) {
+        return NextResponse.json(
+          { error: 'Access denied to one or more scans' },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Delete scans (findings will be cascade deleted if foreign key is set)
+    const { error: deleteError } = await supabase
+      .from('scans')
+      .delete()
+      .in('id', ids)
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: 'Failed to delete scans' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      deleted: ids.length,
+      message: 'Scans deleted successfully'
+    })
+  } catch (error) {
+    console.error('Error in DELETE /api/scans:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
