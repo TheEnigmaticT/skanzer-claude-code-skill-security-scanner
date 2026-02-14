@@ -270,6 +270,21 @@ export default function GitHubScanPage() {
                   </button>
                 </div>
 
+                {/* Repo Report Link */}
+                {repoInfo && (
+                  <div className="bg-brand-accent-light border border-brand-accent p-4">
+                    <a
+                      href={`/repo/${repoInfo.owner}/${repoInfo.repo}`}
+                      className="inline-flex items-center font-mono text-sm font-bold text-brand-accent hover:text-brand-accent-hover"
+                    >
+                      View Repository Report for {repoInfo.owner}/{repoInfo.repo} &rarr;
+                    </a>
+                    <p className="text-xs text-brand-muted mt-1">
+                      See all skills and findings for this repository in one place.
+                    </p>
+                  </div>
+                )}
+
                 <div className="bg-brand-surface border border-brand-border">
                   <div className="px-4 py-5 sm:p-6">
                     <div className="space-y-4">
@@ -354,21 +369,28 @@ export default function GitHubScanPage() {
 
                 {/* Badge Embed Section */}
                 {(() => {
-                  // Pick the scan with worst findings for the repo-level badge
                   const completedScans = scans.filter(s => s.status === 'completed')
-                  if (completedScans.length === 0) return null
+                  if (completedScans.length === 0 || !repoInfo) return null
 
+                  const repoName = `${repoInfo.owner}/${repoInfo.repo}`
+                  const origin = window.location.origin
+
+                  // Repo-level badge (recommended)
+                  const repoBadgeUrl = `${origin}/api/badge/repo/${repoInfo.owner}/${repoInfo.repo}`
+                  const repoPageUrl = `${origin}/repo/${repoInfo.owner}/${repoInfo.repo}`
+                  const repoMdSnippet = `[![Skanzer Security Scan](${repoBadgeUrl})](${repoPageUrl})`
+                  const repoHtmlSnippet = `<a href="${repoPageUrl}"><img src="${repoBadgeUrl}" alt="Skanzer Security Scan for ${repoName}"></a>`
+
+                  // Single-scan badge (pick worst scan)
                   const severityRank = { critical: 4, high: 3, medium: 2, low: 1 }
                   const worstScan = completedScans.reduce((worst, scan) => {
                     const worstSev = Math.max(0, ...(scan.findings || []).map(f => severityRank[f.severity] || 0))
                     const currentWorstSev = Math.max(0, ...(worst.findings || []).map(f => severityRank[f.severity] || 0))
                     return worstSev > currentWorstSev ? scan : worst
                   }, completedScans[0])
-
-                  const badgeUrl = `${window.location.origin}/api/badge/${worstScan.id}`
-                  const repoName = repoInfo ? `${repoInfo.owner}/${repoInfo.repo}` : 'repo'
-                  const mdSnippet = `![Skanzer Security Scan](${badgeUrl})`
-                  const htmlSnippet = `<img src="${badgeUrl}" alt="Skanzer Security Scan for ${repoName}">`
+                  const scanBadgeUrl = `${origin}/api/badge/${worstScan.id}`
+                  const scanMdSnippet = `![Skanzer Security Scan](${scanBadgeUrl})`
+                  const scanHtmlSnippet = `<img src="${scanBadgeUrl}" alt="Skanzer Security Scan for ${repoName}">`
 
                   const copyToClipboard = (text: string, label: string) => {
                     navigator.clipboard.writeText(text)
@@ -381,49 +403,74 @@ export default function GitHubScanPage() {
                       <div className="px-4 py-5 sm:p-6">
                         <h3 className="font-mono text-base font-bold text-brand-text mb-4">Embed Badge</h3>
                         <p className="text-sm text-brand-muted mb-4">
-                          Add this badge to your repository README to show its security scan status.
+                          Add a badge to your repository README to show its security scan status.
                         </p>
 
-                        {/* Badge Preview */}
-                        <div className="mb-6 p-4 bg-brand-bg rounded-lg flex items-center justify-center">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={badgeUrl}
-                            alt={`Skanzer Security Scan for ${repoName}`}
-                            height={20}
-                          />
+                        {/* Repo Badge (Recommended) */}
+                        <div className="mb-6 p-4 border border-brand-accent bg-brand-accent-light">
+                          <div className="flex items-center gap-2 mb-3">
+                            <h4 className="font-mono text-sm font-bold text-brand-text">Repository Badge</h4>
+                            <span className="text-xs font-medium text-brand-accent bg-white px-1.5 py-0.5">Recommended</span>
+                          </div>
+                          <p className="text-xs text-brand-muted mb-3">
+                            Shows aggregate status across all scanned skills. Updates automatically with new scans.
+                          </p>
+                          <div className="mb-3 p-3 bg-white flex items-center justify-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={repoBadgeUrl} alt={`Skanzer Security Scan for ${repoName}`} height={20} />
+                          </div>
+                          <div className="space-y-2">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-medium text-brand-muted">Markdown</label>
+                                <button onClick={() => copyToClipboard(repoMdSnippet, 'repo-md')} className="text-xs text-brand-accent hover:text-brand-accent-hover">
+                                  {copied === 'repo-md' ? 'Copied!' : 'Copy'}
+                                </button>
+                              </div>
+                              <pre className="text-xs bg-white p-2 overflow-x-auto select-all"><code>{repoMdSnippet}</code></pre>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-medium text-brand-muted">HTML</label>
+                                <button onClick={() => copyToClipboard(repoHtmlSnippet, 'repo-html')} className="text-xs text-brand-accent hover:text-brand-accent-hover">
+                                  {copied === 'repo-html' ? 'Copied!' : 'Copy'}
+                                </button>
+                              </div>
+                              <pre className="text-xs bg-white p-2 overflow-x-auto select-all"><code>{repoHtmlSnippet}</code></pre>
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Markdown Snippet */}
-                        <div className="mb-4">
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-sm font-medium text-brand-muted">Markdown</label>
-                            <button
-                              onClick={() => copyToClipboard(mdSnippet, 'markdown')}
-                              className="text-xs text-brand-accent hover:text-brand-accent-hover"
-                            >
-                              {copied === 'markdown' ? 'Copied!' : 'Copy'}
-                            </button>
+                        {/* Single-Scan Badge */}
+                        <div className="p-4 border border-brand-border">
+                          <h4 className="font-mono text-sm font-bold text-brand-text mb-3">Single-Scan Badge</h4>
+                          <p className="text-xs text-brand-muted mb-3">
+                            Shows the result of this specific scan only.
+                          </p>
+                          <div className="mb-3 p-3 bg-brand-bg flex items-center justify-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={scanBadgeUrl} alt={`Skanzer Security Scan for ${repoName}`} height={20} />
                           </div>
-                          <pre className="text-xs bg-brand-bg p-3 rounded overflow-x-auto select-all">
-                            <code>{mdSnippet}</code>
-                          </pre>
-                        </div>
-
-                        {/* HTML Snippet */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-sm font-medium text-brand-muted">HTML</label>
-                            <button
-                              onClick={() => copyToClipboard(htmlSnippet, 'html')}
-                              className="text-xs text-brand-accent hover:text-brand-accent-hover"
-                            >
-                              {copied === 'html' ? 'Copied!' : 'Copy'}
-                            </button>
+                          <div className="space-y-2">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-medium text-brand-muted">Markdown</label>
+                                <button onClick={() => copyToClipboard(scanMdSnippet, 'scan-md')} className="text-xs text-brand-accent hover:text-brand-accent-hover">
+                                  {copied === 'scan-md' ? 'Copied!' : 'Copy'}
+                                </button>
+                              </div>
+                              <pre className="text-xs bg-brand-bg p-2 overflow-x-auto select-all"><code>{scanMdSnippet}</code></pre>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-medium text-brand-muted">HTML</label>
+                                <button onClick={() => copyToClipboard(scanHtmlSnippet, 'scan-html')} className="text-xs text-brand-accent hover:text-brand-accent-hover">
+                                  {copied === 'scan-html' ? 'Copied!' : 'Copy'}
+                                </button>
+                              </div>
+                              <pre className="text-xs bg-brand-bg p-2 overflow-x-auto select-all"><code>{scanHtmlSnippet}</code></pre>
+                            </div>
                           </div>
-                          <pre className="text-xs bg-brand-bg p-3 rounded overflow-x-auto select-all">
-                            <code>{htmlSnippet}</code>
-                          </pre>
                         </div>
                       </div>
                     </div>
