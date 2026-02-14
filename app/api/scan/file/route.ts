@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { analyzeSkillContent } from '@/lib/analyze'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+    const admin = createServiceClient()
+
     // Get authenticated user
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -65,8 +66,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create scan record
-    const { data: scan, error: scanError } = await supabase
+    // Create scan record (service role — no RLS update policy on scans)
+    const { data: scan, error: scanError } = await admin
       .from('scans')
       .insert({
         skill_id: skill.id,
@@ -88,15 +89,14 @@ export async function POST(request: NextRequest) {
     // Perform static analysis
     const findings = analyzeSkillContent(content, skill.id, scan.id)
 
-    // Insert findings
+    // Insert findings (service role — no RLS insert policy on findings)
     if (findings.length > 0) {
-      const { error: findingsError } = await supabase
+      const { error: findingsError } = await admin
         .from('findings')
         .insert(findings)
 
       if (findingsError) {
-        // Update scan with error but don't fail the whole request
-        await supabase
+        await admin
           .from('scans')
           .update({
             status: 'failed',
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update scan status to completed
-    await supabase
+    await admin
       .from('scans')
       .update({
         status: 'completed',
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       .eq('id', scan.id)
 
     // Return scan with details
-    const { data: scanWithDetails } = await supabase
+    const { data: scanWithDetails } = await admin
       .from('scans')
       .select(`
         *,

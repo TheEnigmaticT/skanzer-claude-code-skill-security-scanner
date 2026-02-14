@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { analyzeSkillContent } from '@/lib/analyze'
 import type { Scan } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
+  const admin = createServiceClient()
 
   // Get authenticated user
   const { data: { user } } = await supabase.auth.getUser()
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
   // Process each skill
   for (const skill of skills) {
     // Create a new scan record
-    const { data: scan, error: scanError } = await supabase
+    const { data: scan, error: scanError } = await admin
       .from('scans')
       .insert({
         skill_id: skill.id,
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
 
       // Insert findings if any
       if (findings.length > 0) {
-        const { error: findingsError } = await supabase
+        const { error: findingsError } = await admin
           .from('findings')
           .insert(findings)
 
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Update scan to completed
-      const { error: updateError } = await supabase
+      const { error: updateError } = await admin
         .from('scans')
         .update({
           status: 'completed',
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       createdScans.push(scan)
     } catch (error) {
       // Mark scan as failed
-      await supabase
+      await admin
         .from('scans')
         .update({
           status: 'failed',
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Fetch all created scans with details (skill and findings)
-  const { data: scansWithDetails, error: fetchError } = await supabase
+  const { data: scansWithDetails, error: fetchError } = await admin
     .from('scans')
     .select(`
       *,

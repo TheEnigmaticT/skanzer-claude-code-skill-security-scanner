@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getFileContent } from '@/lib/github'
 import { analyzeSkillContent } from '@/lib/analyze'
 import type { ScanWithDetails } from '@/lib/types'
@@ -9,6 +9,8 @@ export const maxDuration = 30
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = createServiceClient()
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json(
@@ -44,72 +46,78 @@ export async function POST(request: NextRequest) {
       })
     )
 
-    // Create all skill records in one batch
-    const skillInserts = fileResults.map(r => ({
-      user_id: user.id,
-      name: r.name,
-      content: r.content || '',
-      file_path: `github:${owner}/${repo}/${r.filePath}`,
-    }))
+    // Process each file: create skill, scan, analyze, insert findings
+    const scanIds: string[] = []
 
-    const { data: skills, error: skillsError } = await supabase
-      .from('skills')
-      .insert(skillInserts)
-      .select()
+    for (const result of fileResults) {
+      // Create skill record
+      const { data: skill, error: skillError } = await admin
+        .from('skills')
+        .insert({
+          user_id: user.id,
+          name: result.name,
+          content: result.content || '',
+          file_path: `github:${owner}/${repo}/${result.filePath}`,
+        })
+        .select()
+        .single()
 
-    if (skillsError || !skills) {
-      return NextResponse.json(
-        { error: 'Failed to create skill records', details: skillsError?.message },
-        { status: 500 }
-      )
-    }
+      if (skillError || !skill) {
+        console.error(`Failed to create skill for ${result.filePath}:`, skillError)
+        continue
+      }
 
-    // Create all scan records in one batch
-    const scanInserts = skills.map((skill, i) => ({
-      skill_id: skill.id,
-      status: fileResults[i].error ? 'failed' as const : 'scanning' as const,
-      started_at: new Date().toISOString(),
-      ...(fileResults[i].error ? {
-        completed_at: new Date().toISOString(),
-        error_message: fileResults[i].error,
-      } : {}),
-    }))
+      // If file fetch failed, create a failed scan
+      if (result.error) {
+        const { data: scan } = await admin
+          .from('scans')
+          .insert({
+            skill_id: skill.id,
+            status: 'failed',
+            started_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+            error_message: result.error,
+          })
+          .select()
+          .single()
+        if (scan) scanIds.push(scan.id)
+        continue
+      }
 
-    const { data: scans, error: scansError } = await supabase
-      .from('scans')
-      .insert(scanInserts)
-      .select()
+      // Create scan record
+      const { data: scan, error: scanError } = await admin
+        .from('scans')
+        .insert({
+          skill_id: skill.id,
+          status: 'scanning',
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single()
 
-    if (scansError || !scans) {
-      return NextResponse.json(
-        { error: 'Failed to create scan records', details: scansError?.message },
-        { status: 500 }
-      )
-    }
-
-    // Analyze and insert findings for files that were fetched successfully
-    const analyzePromises = scans.map(async (scan, i) => {
-      if (scan.status === 'failed') return
-
-      const content = fileResults[i].content!
-      const skill = skills[i]
+      if (scanError || !scan) {
+        console.error(`Failed to create scan for ${result.filePath}:`, scanError)
+        continue
+      }
 
       try {
-        const findings = analyzeSkillContent(content, skill.id, scan.id)
+        const findings = analyzeSkillContent(result.content!, skill.id, scan.id)
 
         if (findings.length > 0) {
-          const { error: findingsError } = await supabase
+          const { error: findingsError } = await admin
             .from('findings')
             .insert(findings)
           if (findingsError) throw findingsError
         }
 
-        await supabase
+        await admin
           .from('scans')
           .update({ status: 'completed', completed_at: new Date().toISOString() })
           .eq('id', scan.id)
+
+        scanIds.push(scan.id)
       } catch (error) {
-        await supabase
+        await admin
           .from('scans')
           .update({
             status: 'failed',
@@ -117,20 +125,19 @@ export async function POST(request: NextRequest) {
             completed_at: new Date().toISOString(),
           })
           .eq('id', scan.id)
+        scanIds.push(scan.id)
       }
-    })
+    }
 
-    await Promise.all(analyzePromises)
-
-    // Fetch all scans with details
-    const { data: scansWithDetails } = await supabase
+    // Fetch all scans with details (use admin to ensure we get everything)
+    const { data: scansWithDetails } = await admin
       .from('scans')
       .select(`
         *,
         skill:skills(*),
         findings:findings(*)
       `)
-      .in('id', scans.map(s => s.id))
+      .in('id', scanIds)
       .order('started_at', { ascending: false })
 
     return NextResponse.json({
