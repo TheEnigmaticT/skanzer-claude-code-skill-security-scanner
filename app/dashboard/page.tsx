@@ -279,10 +279,11 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Findings */}
-        <div className="bg-brand-surface border border-brand-border overflow-hidden mb-8">
-          <div className="px-6 py-4 border-b border-brand-border">
+        <div className="bg-brand-surface border border-brand-border mb-8">
+          <div className="px-4 sm:px-6 py-4 border-b border-brand-border">
             <h2 className="font-mono text-sm font-bold text-brand-text">Recent findings</h2>
           </div>
+          <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-brand-border">
             <thead>
               <tr className="bg-brand-bg">
@@ -315,6 +316,7 @@ export default function DashboardPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </main>
     </div>

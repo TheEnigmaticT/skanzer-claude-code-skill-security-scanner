@@ -111,7 +111,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="bg-brand-surface border border-brand-border">
+      <div className="bg-brand-surface border border-brand-border overflow-x-auto">
         <table className="min-w-full divide-y divide-brand-border">
           <thead className="bg-brand-bg">
             <tr>

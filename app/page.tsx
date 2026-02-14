@@ -18,12 +18,8 @@ export default function Home() {
 
       {/* Hero — left-aligned, no dark bg, no glow, no grid */}
       <section className="px-6 pt-16 pb-24 max-w-5xl mx-auto">
-        <h1 className="font-mono text-4xl sm:text-5xl lg:text-[3.5rem] font-bold tracking-tight leading-[1.15] max-w-2xl">
-          Know what a skill
-          <br />
-          actually does before
-          <br />
-          you run it.
+        <h1 className="font-mono text-3xl sm:text-5xl lg:text-[3.5rem] font-bold tracking-tight leading-[1.15] max-w-2xl">
+          Know what a skill actually does before you run it.
         </h1>
 
         <p className="mt-6 text-lg text-brand-muted max-w-lg leading-relaxed font-sans">
@@ -67,14 +63,14 @@ export default function Home() {
           ].map((item, i) => (
             <div
               key={item.num}
-              className={`flex gap-8 sm:gap-12 items-baseline ${
-                i > 0 ? "mt-12" : ""
+              className={`flex flex-col sm:flex-row gap-4 sm:gap-12 sm:items-baseline ${
+                i > 0 ? "mt-10 sm:mt-12" : ""
               }`}
             >
-              <span className="font-mono text-6xl sm:text-8xl font-bold text-brand-accent-mid select-none leading-none shrink-0">
+              <span className="font-mono text-5xl sm:text-8xl font-bold text-brand-accent-mid select-none leading-none shrink-0">
                 {item.num}
               </span>
-              <div className="pt-2">
+              <div>
                 <h2 className="font-mono text-lg font-bold">{item.title}</h2>
                 <p className="mt-2 text-brand-muted leading-relaxed max-w-lg font-sans">
                   {item.desc}

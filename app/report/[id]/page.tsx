@@ -105,16 +105,16 @@ export default async function PublicReportPage({ params }: PageProps) {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Risk banner */}
-        <div className={`border-l-4 p-6 mb-8 ${riskConfig.border} ${riskConfig.bg}`}>
-          <div className="flex items-center justify-between">
+        <div className={`border-l-4 p-4 sm:p-6 mb-8 ${riskConfig.border} ${riskConfig.bg}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="font-mono text-2xl font-bold ${riskConfig.textColor}">{scanWithDetails.skill.name}</h1>
+              <h1 className={`font-mono text-xl sm:text-2xl font-bold ${riskConfig.textColor}`}>{scanWithDetails.skill.name}</h1>
               {scanWithDetails.skill.file_path && (
-                <p className="font-mono text-xs text-brand-muted mt-1">{scanWithDetails.skill.file_path}</p>
+                <p className="font-mono text-xs text-brand-muted mt-1 break-all">{scanWithDetails.skill.file_path}</p>
               )}
             </div>
-            <div className="text-right">
-              <div className={`font-mono text-2xl font-bold ${riskConfig.textColor}`}>{riskConfig.text}</div>
+            <div className="sm:text-right">
+              <div className={`font-mono text-xl sm:text-2xl font-bold ${riskConfig.textColor}`}>{riskConfig.text}</div>
               <div className="font-mono text-xs text-brand-muted">
                 {scanWithDetails.findings.length} finding{scanWithDetails.findings.length !== 1 ? 's' : ''}
               </div>
@@ -127,7 +127,7 @@ export default async function PublicReportPage({ params }: PageProps) {
           <div className="px-6 py-4 border-b border-brand-border">
             <h2 className="font-mono text-sm font-bold text-brand-text">Scan details</h2>
           </div>
-          <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 sm:p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <dt className="font-mono text-xs text-brand-muted">Status</dt>
               <dd className="mt-1 text-sm text-brand-text capitalize">{scanWithDetails.status}</dd>
@@ -153,7 +153,7 @@ export default async function PublicReportPage({ params }: PageProps) {
             <div className="px-6 py-4 border-b border-brand-border">
               <h2 className="font-mono text-sm font-bold text-brand-text">Summary</h2>
             </div>
-            <div className="p-6 grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="p-4 sm:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               {categories.map(category => {
                 const count = findingsByCategory[category]?.length || 0
                 return (
@@ -185,8 +185,8 @@ export default async function PublicReportPage({ params }: PageProps) {
                 </div>
                 <div className="p-6 space-y-4">
                   {findings.map(finding => (
-                    <div key={finding.id} className="border border-brand-border p-4">
-                      <div className="flex items-start justify-between mb-2">
+                    <div key={finding.id} className="border border-brand-border p-3 sm:p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                         <h3 className="font-mono text-sm font-bold text-brand-text">{finding.title}</h3>
                         <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium ${getSeverityColor(finding.severity)}`}>
                           {finding.severity}

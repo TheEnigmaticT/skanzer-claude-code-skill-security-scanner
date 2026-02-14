@@ -84,7 +84,7 @@ export default async function ScanDetailPage({ params }: PageProps) {
             <h2 className="font-mono text-sm font-bold text-brand-text">Overview</h2>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <div>
                 <dt className="font-mono text-xs text-brand-muted">Skill</dt>
                 <dd className="mt-1 text-sm text-brand-text">{scanWithDetails.skill.name}</dd>
