@@ -31,9 +31,15 @@ html, body {
 }
 
 /* Prevent long URLs/paths/strings from breaking layouts on mobile */
-a, code, pre, td, dd, p, span {
+a, code, pre, td, dd, p {
   overflow-wrap: break-word;
   word-break: break-word;
+}
+
+/* Keep inline badges/pills from squishing */
+.inline-flex {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 body {
