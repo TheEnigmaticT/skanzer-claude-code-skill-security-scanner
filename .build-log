@@ -7572,3 +7572,1051 @@ Summarization failed for model openai/botty-step-flash: cannot schedule new futu
 Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
 summarizer unexpectedly failed for all models
 [19:57:20]   [2/10] Done (8079 bytes)
+[19:57:21]   [3/10] Building app/scan/directory/page.tsx...
+[19:57:21]   [aider] Starting task...
+/Users/ct-mac-mini/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Warning: Input is not a terminal (fd=0).
+
+Warning for openai/botty-step-flash: Unknown context window size and costs, 
+using sane defaults.
+You can skip this check with --no-show-model-warnings
+
+https://aider.chat/docs/llms/warnings.html
+
+Creating empty file 
+/Users/ct-mac-mini/dev/skanzer-claude-code-skill-security-scanner-upload-/app/sc
+an/directory/page.tsx
+Aider v0.82.3
+Model: openai/botty-step-flash with whole edit format
+Git repo: .git with 29 files
+Repo-map: using 1024 tokens, auto refresh
+Added app/scan/directory/page.tsx to the chat.
+Added lib/supabase/client.ts to the chat (read-only).
+Added lib/types.ts to the chat (read-only).
+Added lib/supabase/server.ts to the chat (read-only).
+Added app/nav.tsx to the chat (read-only).
+
+
+--------------
+► **THINKING**
+
+The user wants me to build a new page: `app/scan/directory/page.tsx` for directory scanning interface for bulk skill analysis.
+
+Let me understand the requirements:
+1. Purpose: Directory scanning interface for bulk skill analysis
+2. App description: "Skanzer - Claude Code skill security scanner. Upload skill markdown files or scan skill directories. Detects: 1) Data exfiltration (HTTP calls, file writes outside workspace, env var access), 2) Behavior vs description mismatches (parse skill actions vs stated purpose), 3) Privilege escalation (sudo, dangerous bash commands). Dashboard shows scan results with severity ratings, detailed findings, and safe/unsafe skill counts. Uses static analysis on markdown to find suspicious patterns."
+3. Requirements:
+   - Fetch real data from Supabase using .from('table').select()
+   - Use types from lib/types.ts
+   - Style with Tailwind CSS — professional look, not generic/templated
+   - Include loading and error states
+   - If this page has a form, implement real submission with .insert() or .update()
+   - Use either server component (createClient from lib/supabase/server.ts) or client component ('use client' + createClient from lib/supabase/client.ts)
+   - Make it fully functional, not a placeholder
+
+The file currently is empty (just ```). I need to create a fully functional page.
+
+Let me think about what this page should do:
+- It's for directory scanning, so it should allow users to scan multiple skills at once (bulk analysis)
+- It should probably have a form to upload a directory or select multiple skills
+- It should show scan results
+
+Looking at the types from lib/types.ts:
+- Skill: has id, user_id, name, description?, content, file_path?, created_at, updated_at
+- Scan: has id, skill_id, status, started_at, completed_at?, error_message?
+- Finding: has id, scan_id, skill_id, category, severity, title, description, line_number?, code_snippet?, confidence?, created_at
+- ScanWithDetails: extends Scan with skill and findings
+- DashboardStats: totalSkills, totalScans, safeSkills, unsafeSkills, findingsBySeverity, findingsByCategory
+
+For a directory scanning page, I imagine:
+1. A section to upload/select multiple skills (maybe a file input for directory or multiple file selection)
+2. A button to start scanning
+3. A results section showing the scan status and findings
+
+Since this is a Next.js app, I should decide between server component or client component. Given that we need to handle form submission and likely interact with Supabase, a client component makes sense for the interactive parts. But we could also have a server component that fetches initial data.
+
+Let me design this as a client component because:
+- We need to handle file uploads and form submissions
+- We need to show loading states during scans
+- We need to update the UI as scans complete
+
+I'll create a page that:
+1. Shows a form to upload multiple markdown files (simulating directory scan)
+2. When submitted, creates Scan records for each skill and starts analysis
+3. Shows real-time progress of scans
+4. Displays findings with severity and category
+
+But wait, the requirement says "Fetch real data from Supabase using .from('table').select()". So we need to actually fetch data. For a directory scanning page, what data would we fetch? Possibly:
+- List of existing skills
+- List of scans
+- Maybe recent findings
+
+Actually, thinking about the app flow:
+- There's a page to upload individual skills (app/scan/file/page.tsx)
+- There's a dashboard (app/dashboard/page.tsx)
+- Now we need a directory scanning page
+
+The directory scanning page could:
+- Allow users to select multiple existing skills to scan in bulk
+- Or allow uploading a directory of markdown files
+
+Given the context, I think it's more likely that this page is for scanning multiple skills that already exist in the system (bulk analysis of existing skills). But the description says "Upload skill markdown files or scan skill directories." So it could be either.
+
+Let me re-read: "Directory scanning interface for bulk skill analysis". This suggests scanning a directory of skills, which could mean:
+1. Upload a directory (zip) containing multiple markdown files
+2. Or select multiple skills from the database to scan
+
+Given that there's already a file upload page, the directory page might be for bulk scanning of existing skills. But the description says "Upload skill markdown files or scan skill directories." So it's ambiguous.
+
+I'll design it as:
+- A page that shows a list of skills (from Supabase)
+- Allows selecting multiple skills
+- Has a "Scan Selected" button
+- Shows scan results for those skills
+
+But we also need to implement the actual scanning logic. However, the scanning logic might be a backend process. The page just triggers scans and shows results.
+
+Let me think about the data flow:
+1. User visits page, we fetch skills from Supabase
+2. User selects some skills and clicks "Scan"
+3. For each selected skill, we create a Scan record with status 'pending'
+4. Some background process picks up pending scans and performs analysis, updating the scan status and creating Finding records
+5. The page can poll for updates or use real-time subscription to show progress
+
+Given that this is a frontend page, I'll implement:
+- Fetch skills on mount
+- Allow multi-select
+- On scan, create Scan records via Supabase insert
+- Show scans with their current status and findings
+- Use polling or subscription to update status
+
+I'll use client component with 'use client' directive.
+
+Let me structure the code:
+
+```tsx
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { Skill, Scan, Finding, ScanWithDetails, SeverityLevel, FindingCategory } from '@/lib/types'
+
+export default function DirectoryScanPage() {
+  const supabase = createClient()
+  const [skills, setSkills] = useState<Skill[]>([])
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [scans, setScans] = useState<ScanWithDetails[]>([])
+  const [loading, setLoading] = useState(true)
+  const [scanning, setScanning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch skills on mount
+  useEffect(() => {
+    async function fetchSkills() {
+      const { data, error } = await supabase
+        .from('skills')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        setError(error.message)
+      } else {
+        setSkills(data || [])
+      }
+      setLoading(false)
+    }
+    fetchSkills()
+  }, [supabase])
+
+  // Fetch scans periodically or via subscription
+  useEffect(() => {
+    if (scans.length === 0) return
+
+    const interval = setInterval(async () => {
+      const { data, error } = await supabase
+        .from('scans')
+        .select(`
+          *,
+          skill:skills(*),
+          findings:findings(*)
+        `)
+        .in('id', scans.map(s => s.id))
+      
+      if (!error && data) {
+        setScans(prev => {
+          const updated = data as ScanWithDetails[]
+          // Merge with existing to preserve order?
+          return updated
+        })
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [scans, supabase])
+
+  const handleScan = async () => {
+    if (selectedSkillIds.length === 0) return
+
+    setScanning(true)
+    setError(null)
+
+    // Create a scan for each selected skill
+    const newScans = selectedSkillIds.map(skillId => ({
+      skill_id: skillId,
+      status: 'pending' as const,
+      started_at: new Date().toISOString()
+    }))
+
+    const { error: insertError } = await supabase
+      .from('scans')
+      .insert(newScans)
+
+    if (insertError) {
+      setError(insertError.message)
+      setScanning(false)
+      return
+    }
+
+    // Fetch the created scans to display
+    const { data: createdScans } = await supabase
+      .from('scans')
+      .select(`
+        *,
+        skill:skills(*),
+        findings:findings(*)
+      `)
+      .in('skill_id', selectedSkillIds)
+      .order('started_at', { ascending: false })
+      .limit(selectedSkillIds.length)
+
+    if (createdScans) {
+      setScans(prev => [...createdScans as ScanWithDetails[], ...prev])
+    }
+
+    setScanning(false)
+    setSelectedSkillIds([])
+  }
+
+  const toggleSkillSelection = (skillId: string) => {
+    setSelectedSkillIds(prev => 
+      prev.includes(skillId) 
+        ? prev.filter(id => id !== skillId)
+        : [...prev, skillId]
+    )
+  }
+
+  if (loading) {
+    return <div>Loading skills...</div>
+  }
+
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Directory Scan</h1>
+      
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Select Skills to Scan</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {skills.map(skill => (
+            <div 
+              key={skill.id}
+              className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                selectedSkillIds.includes(skill.id)
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+              onClick={() => toggleSkillSelection(skill.id)}
+            >
+              <h3 className="font-medium">{skill.name}</h3>
+              {skill.description && (
+                <p className="text-sm text-gray-600 mt-1">{skill.description}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                File: {skill.file_path || 'N/A'}
+              </p>
+            </div>
+          ))}
+        </div>
+        
+        <div className="mt-4 flex items-center space-x-4">
+          <button
+            onClick={handleScan}
+            disabled={selectedSkillIds.length === 0 || scanning}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md"
+          >
+            {scanning ? 'Starting Scans...' : `Scan ${selectedSkillIds.length} Skill${selectedSkillIds.length !== 1 ? 's' : ''}`}
+          </button>
+          <span className="text-sm text-gray-600">
+            {selectedSkillIds.length} selected
+          </span>
+        </div>
+      </div>
+
+      {scans.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Scan Results</h2>
+          <div className="space-y-4">
+            {scans.map(scan => (
+              <div key={scan.id} className="border rounded-lg p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-medium">{scan.skill.name}</h3>
+                    <p className="text-sm text-gray-600">
+                      Started: {new Date(scan.started_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    scan.status === 'completed' ? 'bg-green-100 text-green-800' :
+                    scan.status === 'failed' ? 'bg-red-100 text-red-800' :
+                    scan.status === 'scanning' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {scan.status}
+                  </span>
+                </div>
+
+                {scan.error_message && (
+                  <p className="text-red-600 text-sm mb-2">{scan.error_message}</p>
+                )}
+
+                {scan.findings && scan.findings.length > 0 && (
+                  <div className="mt-3">
+                    <h4 className="font-medium mb-2">Findings ({scan.findings.length})</h4>
+                    <div className="space-y-2">
+                      {scan.findings.map(finding => (
+                        <div key={finding.id} className="border-l-4 pl-3 py-1" style={{
+                          borderColor: finding.severity === 'critical' ? '#ef4444' :
+                                      finding.severity === 'high' ? '#f97316' :
+                                      finding.severity === 'medium' ? '#eab308' : '#22c55e'
+                        }}>
+                          <div className="flex justify-between">
+                            <span className="font-medium">{finding.title}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs ${
+                              finding.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                              finding.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                              finding.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {finding.severity}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700">{finding.description}</p>
+                          {finding.category && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Category: {finding.category}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+But wait, I need to consider:
+- The types: I'm using ScanWithDetails which includes skill and findings. But in the types file, ScanWithDetails is defined as:
+  export interface ScanWithDetails extends Scan {
+    skill: Skill
+    findings: Finding[]
+  }
+So that's correct.
+
+- I'm using Supabase queries with select and joins. The syntax for joining in Supabase is:
+  .select(`*, skill:skills(*), findings:findings(*)`)
+But I need to check if the foreign key relationships are set up correctly. In the Scan table, there should be a skill_id foreign key to skills.id. And in the Finding table, there should be scan_id foreign key to scans.id. So the join syntax should work.
+
+- I'm polling every 2 seconds to update scan status. This is simple but not optimal. Could use realtime subscriptions but polling is simpler for now.
+
+- I need to handle the case where scans might not have findings yet (status is pending or scanning). That's fine.
+
+- I should also consider that the user might navigate away, so cleanup is important.
+
+- The styling: I'm using Tailwind classes. I tried to make it look professional but not generic. I used a grid for skills, cards for scans, etc.
+
+- I need to import the types correctly. The path is '@/lib/types' which should resolve to lib/types.ts.
+
+- I'm using createClient from '@/lib/supabase/client' because it's a client component.
+
+- I should add proper error handling and loading states.
+
+- The page should be fully functional: it fetches skills, allows selection, creates scans, and shows results.
+
+One thing: The requirement says "If this page has a form, implement real submission with .insert() or .update()". I have a form (the selection and scan button) and I'm using .insert() to create scans. So that's covered.
+
+But wait, the directory scanning might involve uploading files. The description says "Upload skill markdown files or scan skill directories." So maybe this page should also allow file uploads? However, there's already a file upload page at app/scan/file/page.tsx. So the directory page might be specifically for scanning multiple existing skills, not uploading new ones. The description says "or scan skill directories" which could mean scanning a directory of skills that are already in the system.
+
+Given that the file upload page exists, I'll assume the directory page is for bulk scanning of existing skills. But to be safe, I could also add an option to upload a directory (multiple files). However, that would be similar to the file page but with multiple files. But the requirement says "Build the page: app/scan/directory/page.tsx" and the purpose is "Directory scanning interface for bulk skill analysis". So it's about scanning a directory, which could be interpreted as scanning multiple skills at once.
+
+I'll stick with the design of selecting existing skills. If the user wants file upload, they can use the file page.
+
+But let me re-read the app description: "Upload skill markdown files or scan skill directories." This suggests two separate features: uploading individual files, and scanning directories. So the directory scanning might be about scanning a directory path on the server? That seems less likely in a web app. More likely, it's about scanning a directory of skills that are already uploaded.
+
+Given the context of the other pages:
+- app/scan/file/page.tsx: probably for uploading a single skill file
+- app/scan/directory/page.tsx: for scanning multiple skills (maybe those in a particular directory or all skills)
+
+I think my approach is reasonable.
+
+Now, I need to output the entire file content in the specified format.
+
+But wait, the user said: "I have *added these files to the chat* so you can go ahead and edit them." and then listed files including `app/scan/directory/page.tsx` with empty content. So I should create the content for that file.
+
+I'll produce the file listing as:
+
+app/scan/directory/page.tsx
+```
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { Skill, Scan, Finding, ScanWithDetails, SeverityLevel, FindingCategory } from '@/lib/types'
+
+export default function DirectoryScanPage() {
+  const supabase = createClient()
+  const [skills, setSkills] = useState<Skill[]>([])
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [scans, setScans] = useState<ScanWithDetails[]>([])
+  const [loading, setLoading] = useState(true)
+  const [scanning, setScanning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch skills on mount
+  useEffect(() => {
+    async function fetchSkills() {
+      const { data, error } = await supabase
+        .from('skills')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        setError(error.message)
+      } else {
+        setSkills(data || [])
+      }
+      setLoading(false)
+    }
+    fetchSkills()
+  }, [supabase])
+
+  // Fetch scans periodically to update status
+  useEffect(() => {
+    if (scans.length === 0) return
+
+    const interval = setInterval(async () => {
+      const { data, error } = await supabase
+        .from('scans')
+        .select(`
+          *,
+          skill:skills(*),
+          findings:findings(*)
+        `)
+        .in('id', scans.map(s => s.id))
+      
+      if (!error && data) {
+        setScans(prev => {
+          // Update existing scans with new data, preserving order
+          const updatedMap = new Map(data.map(s => [s.id, s as ScanWithDetails]))
+          return prev.map(p => updatedMap.get(p.id) || p)
+        })
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [scans, supabase])
+
+  const handleScan = async () => {
+    if (selectedSkillIds.length === 0) return
+
+    setScanning(true)
+    setError(null)
+
+    // Create a scan for each selected skill
+    const newScans = selectedSkillIds.map(skillId => ({
+      skill_id: skillId,
+      status: 'pending' as const,
+      started_at: new Date().toISOString()
+    }))
+
+    const { error: insertError } = await supabase
+      .from('scans')
+      .insert(newScans)
+
+    if (insertError) {
+      setError(insertError.message)
+      setScanning(false)
+      return
+    }
+
+    // Fetch the created scans to display
+    const { data: createdScans } = await supabase
+      .from('scans')
+      .select(`
+        *,
+        skill:skills(*),
+        findings:findings(*)
+      `)
+      .in('skill_id', selectedSkillIds)
+      .order('started_at', { ascending: false })
+      .limit(selectedSkillIds.length)
+
+    if (createdScans) {
+      setScans(prev => [...createdScans as ScanWithDetails[], ...prev])
+    }
+
+    setScanning(false)
+    setSelectedSkillIds([])
+  }
+
+  const toggleSkillSelection = (skillId: string) => {
+    setSelectedSkillIds(prev => 
+      prev.includes(skillId) 
+        ? prev.filter(id => id !== skillId)
+        : [...prev, skillId]
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading skills...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Directory Scan</h1>
+          <p className="mt-2 text-gray-600">
+            Select multiple skills to analyze in bulk. The scanner will check for data exfiltration, 
+            behavior mismatches, and privilege escalation.
+          </p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white shadow rounded-lg mb-8">
+          <div className="px-4 py-5 sm:p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Select Skills</h2>
+            
+            {skills.length === 0 ? (
+              <p className="text-gray-500">No skills available. Upload some skills first.</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                  {skills.map(skill => (
+                    <div 
+                      key={skill.id}
+                      className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                        selectedSkillIds.includes(skill.id)
+                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                      onClick={() => toggleSkillSelection(skill.id)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900">{skill.name}</h3>
+                          {skill.description && (
+                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{skill.description}</p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-2">
+                            File: {skill.file_path || 'N/A'}
+                          </p>
+                        </div>
+                        <div className={`ml-2 flex-shrink-0 w-5 h-5 rounded border ${
+                          selectedSkillIds.includes(skill.id)
+                            ? 'bg-blue-600 border-blue-600'
+                            : 'border-gray-300'
+                        }`}>
+                          {selectedSkillIds.includes(skill.id) && (
+                            <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                  <div className="text-sm text-gray-600">
+                    {selectedSkillIds.length} of {skills.length} skills selected
+                  </div>
+                  <button
+                    onClick={handleScan}
+                    disabled={selectedSkillIds.length === 0 || scanning}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {scanning ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Starting...
+                      </>
+                    ) : (
+                      `Scan ${selectedSkillIds.length} Skill${selectedSkillIds.length !== 1 ? 's' : ''}`
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {scans.length > 0 && (
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Scans</h2>
+              <div className="space-y-4">
+                {scans.map(scan => (
+                  <div key={scan.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{scan.skill.name}</h3>
+                        <p className="text-sm text-gray-500">
+                          Started: {new Date(scan.started_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        scan.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        scan.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        scan.status === 'scanning' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {scan.status}
+                      </span>
+                    </div>
+
+                    {scan.error_message && (
+                      <div className="mb-3 text-sm text-red-600 bg-red-50 p-2 rounded">
+                        Error: {scan.error_message}
+                      </div>
+                    )}
+
+                    {scan.findings && scan.findings.length > 0 && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2">
+                          Findings ({scan.findings.length})
+                        </h4>
+                        <div className="space-y-3">
+                          {scan.findings.map(finding => (
+                            <div key={finding.id} className="border-l-4 pl-3 py-1" style={{
+                              borderColor: finding.severity === 'critical' ? '#ef4444' :
+                                          finding.severity === 'high' ? '#f97316' :
+                                          finding.severity === 'medium' ? '#eab308' : '#22c55e'
+                            }}>
+                              <div className="flex justify-between items-start">
+                                <span className="font-medium text-gray-900">{finding.title}</span>
+                                <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  finding.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                                  finding.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                                  finding.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  {finding.severity}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700 mt-1">{finding.description}</p>
+                              {finding.category && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Category: {finding.category}
+                                </p>
+                              )}
+                              {finding.line_number && (
+                                <p className="text-xs text-gray-500">
+                                  Line: {finding.line_number}
+                                </p>
+                              )}
+                              {finding.code_snippet && (
+                                <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                                  <code>{finding.code_snippet}</code>
+                                </pre>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {scan.status === 'completed' && (!scan.findings || scan.findings.length === 0) && (
+                      <p className="text-sm text-green-600">No issues found. Skill appears safe.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+I've made it fully functional with:
+- Fetching skills from Supabase
+- Multi-select interface
+- Creating scans via insert
+- Polling for scan updates
+- Displaying findings with severity colors
+- Loading and error states
+- Professional Tailwind styling
+
+I think this meets all requirements.
+
+Now I need to output it in the exact format.
+
+------------
+► **ANSWER**
+
+app/scan/directory/page.tsx
+```
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { Skill, Scan, Finding, ScanWithDetails, SeverityLevel, FindingCategory } from '@/lib/types'
+
+export default function DirectoryScanPage() {
+  const supabase = createClient()
+  const [skills, setSkills] = useState<Skill[]>([])
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [scans, setScans] = useState<ScanWithDetails[]>([])
+  const [loading, setLoading] = useState(true)
+  const [scanning, setScanning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch skills on mount
+  useEffect(() => {
+    async function fetchSkills() {
+      const { data, error } = await supabase
+        .from('skills')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        setError(error.message)
+      } else {
+        setSkills(data || [])
+      }
+      setLoading(false)
+    }
+    fetchSkills()
+  }, [supabase])
+
+  // Fetch scans periodically to update status
+  useEffect(() => {
+    if (scans.length === 0) return
+
+    const interval = setInterval(async () => {
+      const { data, error } = await supabase
+        .from('scans')
+        .select(`
+          *,
+          skill:skills(*),
+          findings:findings(*)
+        `)
+        .in('id', scans.map(s => s.id))
+      
+      if (!error && data) {
+        setScans(prev => {
+          // Update existing scans with new data, preserving order
+          const updatedMap = new Map(data.map(s => [s.id, s as ScanWithDetails]))
+          return prev.map(p => updatedMap.get(p.id) || p)
+        })
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [scans, supabase])
+
+  const handleScan = async () => {
+    if (selectedSkillIds.length === 0) return
+
+    setScanning(true)
+    setError(null)
+
+    // Create a scan for each selected skill
+    const newScans = selectedSkillIds.map(skillId => ({
+      skill_id: skillId,
+      status: 'pending' as const,
+      started_at: new Date().toISOString()
+    }))
+
+    const { error: insertError } = await supabase
+      .from('scans')
+      .insert(newScans)
+
+    if (insertError) {
+      setError(insertError.message)
+      setScanning(false)
+      return
+    }
+
+    // Fetch the created scans to display
+    const { data: createdScans } = await supabase
+      .from('scans')
+      .select(`
+        *,
+        skill:skills(*),
+        findings:findings(*)
+      `)
+      .in('skill_id', selectedSkillIds)
+      .order('started_at', { ascending: false })
+      .limit(selectedSkillIds.length)
+
+    if (createdScans) {
+      setScans(prev => [...createdScans as ScanWithDetails[], ...prev])
+    }
+
+    setScanning(false)
+    setSelectedSkillIds([])
+  }
+
+  const toggleSkillSelection = (skillId: string) => {
+    setSelectedSkillIds(prev => 
+      prev.includes(skillId) 
+        ? prev.filter(id => id !== skillId)
+        : [...prev, skillId]
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading skills...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Directory Scan</h1>
+          <p className="mt-2 text-gray-600">
+            Select multiple skills to analyze in bulk. The scanner will check for data exfiltration, 
+            behavior mismatches, and privilege escalation.
+          </p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white shadow rounded-lg mb-8">
+          <div className="px-4 py-5 sm:p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Select Skills</h2>
+            
+            {skills.length === 0 ? (
+              <p className="text-gray-500">No skills available. Upload some skills first.</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                  {skills.map(skill => (
+                    <div 
+                      key={skill.id}
+                      className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                        selectedSkillIds.includes(skill.id)
+                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                      onClick={() => toggleSkillSelection(skill.id)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900">{skill.name}</h3>
+                          {skill.description && (
+                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{skill.description}</p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-2">
+                            File: {skill.file_path || 'N/A'}
+                          </p>
+                        </div>
+                        <div className={`ml-2 flex-shrink-0 w-5 h-5 rounded border ${
+                          selectedSkillIds.includes(skill.id)
+                            ? 'bg-blue-600 border-blue-600'
+                            : 'border-gray-300'
+                        }`}>
+                          {selectedSkillIds.includes(skill.id) && (
+                            <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                  <div className="text-sm text-gray-600">
+                    {selectedSkillIds.length} of {skills.length} skills selected
+                  </div>
+                  <button
+                    onClick={handleScan}
+                    disabled={selectedSkillIds.length === 0 || scanning}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {scanning ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Starting...
+                      </>
+                    ) : (
+                      `Scan ${selectedSkillIds.length} Skill${selectedSkillIds.length !== 1 ? 's' : ''}`
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {scans.length > 0 && (
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Scans</h2>
+              <div className="space-y-4">
+                {scans.map(scan => (
+                  <div key={scan.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{scan.skill.name}</h3>
+                        <p className="text-sm text-gray-500">
+                          Started: {new Date(scan.started_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        scan.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        scan.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        scan.status === 'scanning' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {scan.status}
+                      </span>
+                    </div>
+
+                    {scan.error_message && (
+                      <div className="mb-3 text-sm text-red-600 bg-red-50 p-2 rounded">
+                        Error: {scan.error_message}
+                      </div>
+                    )}
+
+                    {scan.findings && scan.findings.length > 0 && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2">
+                          Findings ({scan.findings.length})
+                        </h4>
+                        <div className="space-y-3">
+                          {scan.findings.map(finding => (
+                            <div key={finding.id} className="border-l-4 pl-3 py-1" style={{
+                              borderColor: finding.severity === 'critical' ? '#ef4444' :
+                                          finding.severity === 'high' ? '#f97316' :
+                                          finding.severity === 'medium' ? '#eab308' : '#22c55e'
+                            }}>
+                              <div className="flex justify-between items-start">
+                                <span className="font-medium text-gray-900">{finding.title}</span>
+                                <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  finding.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                                  finding.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                                  finding.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  {finding.severity}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700 mt-1">{finding.description}</p>
+                              {finding.category && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Category: {finding.category}
+                                </p>
+                              )}
+                              {finding.line_number && (
+                                <p className="text-xs text-gray-500">
+                                  Line: {finding.line_number}
+                                </p>
+                              )}
+                              {finding.code_snippet && (
+                                <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                                  <code>{finding.code_snippet}</code>
+                                </pre>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {scan.status === 'completed' && (!scan.findings || scan.findings.length === 0) && (
+                      <p className="text-sm text-green-600">No issues found. Skill appears safe.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+Tokens: 3.1k sent, 10k received.
+Applied edit to app/scan/directory/page.tsx
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+summarizer unexpectedly failed for all models
+[19:58:38]   [3/10] Done (13181 bytes)
