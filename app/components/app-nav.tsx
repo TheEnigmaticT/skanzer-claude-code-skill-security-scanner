@@ -5,12 +5,12 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/scan/file', label: 'Scan File' },
-  { href: '/scan/directory', label: 'Scan Directory' },
-  { href: '/scan/github', label: 'Scan GitHub' },
-  { href: '/history', label: 'History' },
-  { href: '/settings', label: 'Settings' },
+  { href: '/dashboard', label: 'dashboard' },
+  { href: '/scan/file', label: 'file' },
+  { href: '/scan/directory', label: 'directory' },
+  { href: '/scan/github', label: 'github' },
+  { href: '/history', label: 'history' },
+  { href: '/settings', label: 'settings' },
 ]
 
 export default function AppNav() {
@@ -25,13 +25,12 @@ export default function AppNav() {
   }
 
   return (
-    <nav className="bg-slate-900 border-b border-slate-800">
+    <nav className="bg-brand-surface border-b border-brand-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-              <span className="text-emerald-400">Skan</span>
-              <span className="text-white">zer</span>
+            <Link href="/dashboard" className="font-mono text-lg font-bold tracking-tight text-brand-text">
+              skanzer
             </Link>
             <div className="flex items-center gap-1">
               {navItems.map((item) => {
@@ -40,10 +39,10 @@ export default function AppNav() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    className={`px-3 py-1.5 font-mono text-xs font-medium transition-colors ${
                       isActive
-                        ? 'bg-slate-800 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                        ? 'bg-brand-accent-light text-brand-accent'
+                        : 'text-brand-muted hover:text-brand-text hover:bg-brand-accent-light/50'
                     }`}
                   >
                     {item.label}
@@ -54,9 +53,9 @@ export default function AppNav() {
           </div>
           <button
             onClick={handleSignOut}
-            className="text-sm text-slate-400 hover:text-white transition-colors"
+            className="font-mono text-xs text-brand-muted hover:text-brand-text transition-colors"
           >
-            Sign out
+            sign out
           </button>
         </div>
       </div>

@@ -50,7 +50,11 @@ export async function GET(
     const dateStr = new Date(scanDate).toISOString().split('T')[0]
 
     const badgeData = buildBadgeData(repoLabel, scan.findings as any[], dateStr)
-    const svg = renderBadgeSvg(badgeData)
+
+    // Build the public report URL
+    const origin = request.nextUrl.origin
+    const reportUrl = `${origin}/report/${id}`
+    const svg = renderBadgeSvg(badgeData, reportUrl)
 
     return new NextResponse(svg, {
       headers: {

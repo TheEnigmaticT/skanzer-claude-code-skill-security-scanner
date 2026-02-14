@@ -52,7 +52,7 @@ export default function SettingsPage() {
     if (error) {
       console.error('Failed to update rule:', error)
     } else {
-      setRules(prev => prev.map(rule => 
+      setRules(prev => prev.map(rule =>
         rule.id === ruleId ? { ...rule, enabled: newEnabled } : rule
       ))
     }
@@ -82,7 +82,7 @@ export default function SettingsPage() {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="font-mono text-sm text-brand-muted">Loading...</p>
         </div>
       </div>
     )
@@ -91,7 +91,7 @@ export default function SettingsPage() {
   if (error) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <div className="text-red-700 text-sm" role="alert">
           <strong className="font-bold">Error: </strong>
           <span className="block sm:inline">{error}</span>
         </div>
@@ -100,49 +100,49 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-brand-bg">
       <AppNav />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Detection Rules Configuration</h1>
-        <p className="mt-2 text-gray-600">
+        <h1 className="font-mono text-2xl font-bold text-brand-text">Detection Rules Configuration</h1>
+        <p className="mt-2 text-brand-muted">
           Manage static analysis patterns used to identify potential security issues in skills.
           Enable or disable rules to customize the scanning behavior.
         </p>
       </div>
 
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="bg-brand-surface border border-brand-border">
+        <table className="min-w-full divide-y divide-brand-border">
+          <thead className="bg-brand-bg">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left font-mono text-xs text-brand-muted">
                 Name
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left font-mono text-xs text-brand-muted">
                 Description
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left font-mono text-xs text-brand-muted">
                 Category
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left font-mono text-xs text-brand-muted">
                 Severity
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left font-mono text-xs text-brand-muted">
                 Pattern
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left font-mono text-xs text-brand-muted">
                 Enabled
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-brand-surface divide-y divide-brand-border">
             {rules.map((rule) => (
-              <tr key={rule.id} className="hover:bg-gray-50">
+              <tr key={rule.id} className="hover:bg-brand-bg">
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">{rule.name}</div>
+                  <div className="text-sm font-medium text-brand-text">{rule.name}</div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm text-gray-500 max-w-xs truncate" title={rule.description || ''}>
+                  <div className="text-sm text-brand-muted max-w-xs truncate" title={rule.description || ''}>
                     {rule.description || '-'}
                   </div>
                 </td>
@@ -157,7 +157,7 @@ export default function SettingsPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm text-gray-500 font-mono max-w-xs truncate" title={rule.pattern}>
+                  <div className="text-sm text-brand-muted font-mono max-w-xs truncate" title={rule.pattern}>
                     {rule.pattern}
                   </div>
                 </td>
@@ -169,8 +169,8 @@ export default function SettingsPage() {
                       checked={rule.enabled}
                       onChange={() => toggleEnabled(rule.id, rule.enabled)}
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    <span className="ml-3 text-sm font-medium text-gray-900">
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-accent-mid rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-accent"></div>
+                    <span className="ml-3 text-sm font-medium text-brand-text">
                       {rule.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </label>
@@ -180,7 +180,7 @@ export default function SettingsPage() {
           </tbody>
         </table>
         {rules.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-brand-muted">
             No detection rules configured.
           </div>
         )}

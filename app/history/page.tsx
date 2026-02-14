@@ -10,7 +10,7 @@ export default function HistoryPage() {
   const [scans, setScans] = useState<ScanWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
+
   // Filter states
   const [selectedSeverities, setSelectedSeverities] = useState<SeverityLevel[]>([])
   const [selectedCategories, setSelectedCategories] = useState<FindingCategory[]>([])
@@ -48,8 +48,8 @@ export default function HistoryPage() {
       return true
     }
 
-    const hasMatchingSeverity = selectedSeverities.length === 0 
-      ? true 
+    const hasMatchingSeverity = selectedSeverities.length === 0
+      ? true
       : scan.findings.some(finding => selectedSeverities.includes(finding.severity))
 
     const hasMatchingCategory = selectedCategories.length === 0
@@ -60,16 +60,16 @@ export default function HistoryPage() {
   })
 
   const toggleSeverity = (severity: SeverityLevel) => {
-    setSelectedSeverities(prev => 
-      prev.includes(severity) 
+    setSelectedSeverities(prev =>
+      prev.includes(severity)
         ? prev.filter(s => s !== severity)
         : [...prev, severity]
     )
   }
 
   const toggleCategory = (category: FindingCategory) => {
-    setSelectedCategories(prev => 
-      prev.includes(category) 
+    setSelectedCategories(prev =>
+      prev.includes(category)
         ? prev.filter(c => c !== category)
         : [...prev, category]
     )
@@ -105,17 +105,9 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-brand-bg py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-            <div className="grid grid-cols-1 gap-4 mt-6">
-              {[1,2,3].map(i => (
-                <div key={i} className="h-32 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-          </div>
+          <p className="font-mono text-sm text-brand-muted">Loading...</p>
         </div>
       </div>
     )
@@ -123,7 +115,7 @@ export default function HistoryPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-brand-bg py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-red-50 border border-red-200 rounded-md p-4">
             <p className="text-red-800">Error loading scan history: {error}</p>
@@ -134,24 +126,24 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-brand-bg">
       <AppNav />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Scan History</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="font-mono text-2xl font-bold text-brand-text">Scan History</h1>
+          <p className="mt-2 text-brand-muted">
             View and filter your past security scans.
           </p>
         </div>
 
         {/* Filters */}
-        <div className="bg-white shadow rounded-lg p-6 mb-8">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Filters</h2>
-          
+        <div className="bg-brand-surface border border-brand-border p-6 mb-8">
+          <h2 className="font-mono text-sm font-bold text-brand-text mb-4">Filters</h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Severity Filter */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Severity</h3>
+              <h3 className="font-mono text-base font-bold text-brand-muted mb-2">Severity</h3>
               <div className="flex flex-wrap gap-2">
                 {severities.map(severity => (
                   <button
@@ -160,7 +152,7 @@ export default function HistoryPage() {
                     className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
                       selectedSeverities.includes(severity)
                         ? getSeverityColor(severity)
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-brand-bg text-brand-muted hover:bg-brand-accent-light'
                     }`}
                   >
                     {severity.charAt(0).toUpperCase() + severity.slice(1)}
@@ -171,7 +163,7 @@ export default function HistoryPage() {
 
             {/* Category Filter */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Detection Pattern</h3>
+              <h3 className="font-mono text-base font-bold text-brand-muted mb-2">Detection Pattern</h3>
               <div className="flex flex-wrap gap-2">
                 {categories.map(category => (
                   <button
@@ -179,8 +171,8 @@ export default function HistoryPage() {
                     onClick={() => toggleCategory(category)}
                     className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
                       selectedCategories.includes(category)
-                        ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-brand-accent-light text-brand-accent hover:bg-brand-accent-light'
+                        : 'bg-brand-bg text-brand-muted hover:bg-brand-accent-light'
                     }`}
                   >
                     {getCategoryLabel(category)}
@@ -192,7 +184,7 @@ export default function HistoryPage() {
 
           {(selectedSeverities.length > 0 || selectedCategories.length > 0) && (
             <div className="mt-4 flex items-center">
-              <span className="text-sm text-gray-500 mr-2">Active filters:</span>
+              <span className="text-sm text-brand-muted mr-2">Active filters:</span>
               <div className="flex flex-wrap gap-2">
                 {selectedSeverities.map(severity => (
                   <span
@@ -211,12 +203,12 @@ export default function HistoryPage() {
                 {selectedCategories.map(category => (
                   <span
                     key={category}
-                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-brand-accent-light text-brand-accent"
                   >
                     {getCategoryLabel(category)}
                     <button
                       onClick={() => toggleCategory(category)}
-                      className="ml-1 text-blue-600 hover:text-blue-800"
+                      className="ml-1 text-brand-accent hover:text-brand-accent-hover"
                     >
                       ×
                     </button>
@@ -227,7 +219,7 @@ export default function HistoryPage() {
                     setSelectedSeverities([])
                     setSelectedCategories([])
                   }}
-                  className="text-sm text-gray-500 hover:text-gray-700 ml-2"
+                  className="text-sm text-brand-muted hover:text-brand-text ml-2"
                 >
                   Clear all
                 </button>
@@ -238,9 +230,9 @@ export default function HistoryPage() {
 
         {/* Scan List */}
         {filteredScans.length === 0 ? (
-          <div className="bg-white shadow rounded-lg p-8 text-center">
-            <p className="text-gray-500">
-              {scans.length === 0 
+          <div className="bg-brand-surface border border-brand-border p-8 text-center">
+            <p className="text-brand-muted">
+              {scans.length === 0
                 ? 'No scans found. Upload a skill and run a scan to get started.'
                 : 'No scans match the current filters.'}
             </p>
@@ -255,18 +247,18 @@ export default function HistoryPage() {
               }, {} as Record<SeverityLevel, number>)
 
               return (
-                <div key={scan.id} className="bg-white shadow rounded-lg p-6">
+                <div key={scan.id} className="bg-brand-surface border border-brand-border p-6">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900">
-                        <Link 
+                      <h3 className="font-mono text-base font-bold text-brand-text">
+                        <Link
                           href={`/scans/${scan.id}`}
-                          className="hover:text-blue-600 transition-colors"
+                          className="hover:text-brand-accent transition-colors"
                         >
                           {scan.skill.name}
                         </Link>
                       </h3>
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-brand-muted mt-1">
                         Started: {new Date(scan.started_at).toLocaleString()}
                         {scan.completed_at && (
                           <span> • Completed: {new Date(scan.completed_at).toLocaleString()}</span>
@@ -275,12 +267,12 @@ export default function HistoryPage() {
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        scan.status === 'completed' 
+                        scan.status === 'completed'
                           ? 'bg-green-100 text-green-800'
                           : scan.status === 'failed'
                           ? 'bg-red-100 text-red-800'
                           : scan.status === 'scanning'
-                          ? 'bg-blue-100 text-blue-800'
+                          ? 'bg-brand-accent-light text-brand-accent'
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
                         {scan.status}
@@ -289,7 +281,7 @@ export default function HistoryPage() {
                   </div>
 
                   <div className="mt-4 flex items-center space-x-4">
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-brand-muted">
                       Total Findings: <span className="font-medium">{totalFindings}</span>
                     </div>
                     {Object.entries(severityCounts).map(([severity, count]) => (
@@ -303,7 +295,7 @@ export default function HistoryPage() {
 
                   {totalFindings > 0 && (
                     <div className="mt-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Top Findings</h4>
+                      <h4 className="text-sm font-medium text-brand-muted mb-2">Top Findings</h4>
                       <div className="space-y-2">
                         {scan.findings.slice(0, 3).map(finding => (
                           <div key={finding.id} className="text-sm">
@@ -311,9 +303,9 @@ export default function HistoryPage() {
                               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getSeverityColor(finding.severity)}`}>
                                 {finding.severity}
                               </span>
-                              <span className="ml-2 text-gray-900">{finding.title}</span>
+                              <span className="ml-2 text-brand-text">{finding.title}</span>
                               {finding.category && (
-                                <span className="ml-2 text-xs text-gray-500">
+                                <span className="ml-2 text-xs text-brand-muted">
                                   ({getCategoryLabel(finding.category)})
                                 </span>
                               )}
@@ -321,7 +313,7 @@ export default function HistoryPage() {
                           </div>
                         ))}
                         {scan.findings.length > 3 && (
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-brand-muted">
                             +{scan.findings.length - 3} more findings
                           </p>
                         )}
@@ -332,7 +324,7 @@ export default function HistoryPage() {
                   <div className="mt-4">
                     <Link
                       href={`/scans/${scan.id}`}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      className="text-brand-accent hover:text-brand-accent-hover text-sm font-medium"
                     >
                       View Details →
                     </Link>

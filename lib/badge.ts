@@ -54,7 +54,7 @@ function textWidth(text: string, fontSize: number): number {
   return text.length * fontSize * 0.6 + 10
 }
 
-export function renderBadgeSvg(data: BadgeData): string {
+export function renderBadgeSvg(data: BadgeData, reportUrl?: string): string {
   const fontSize = 11
   const height = 20
   const padding = 8
@@ -71,7 +71,10 @@ export function renderBadgeSvg(data: BadgeData): string {
 
   const config = RISK_CONFIG[data.riskLevel]
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${height}" role="img" aria-label="Skanzer: ${data.repoLabel} - ${data.riskText} - ${data.scanDate}">
+  const linkOpen = reportUrl ? `<a href="${escapeXml(reportUrl)}" target="_blank">` : ''
+  const linkClose = reportUrl ? '</a>' : ''
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${totalWidth}" height="${height}" role="img" aria-label="Skanzer: ${data.repoLabel} - ${data.riskText} - ${data.scanDate}">
   <title>Skanzer: ${data.repoLabel} - ${data.riskText} - ${data.scanDate}</title>
   <linearGradient id="s" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
@@ -80,20 +83,20 @@ export function renderBadgeSvg(data: BadgeData): string {
   <clipPath id="r">
     <rect width="${totalWidth}" height="${height}" rx="3" fill="#fff"/>
   </clipPath>
-  <g clip-path="url(#r)">
+  ${linkOpen}<g clip-path="url(#r)">
     <rect width="${leftWidth}" height="${height}" fill="#555"/>
     <rect x="${leftWidth}" width="${middleWidth}" height="${height}" fill="${config.color}"/>
     <rect x="${leftWidth + middleWidth}" width="${rightWidth}" height="${height}" fill="${config.colorLight}"/>
     <rect width="${totalWidth}" height="${height}" fill="url(#s)"/>
   </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="${fontSize}">
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="${fontSize}"${reportUrl ? ' style="cursor:pointer"' : ''}>
     <text x="${leftWidth / 2}" y="14" fill="#010101" fill-opacity=".3">${shieldChar} ${escapeXml(leftText)}</text>
     <text x="${leftWidth / 2}" y="13">${shieldChar} ${escapeXml(leftText)}</text>
     <text x="${leftWidth + middleWidth / 2}" y="14" fill="#010101" fill-opacity=".3">${escapeXml(middleText)}</text>
     <text x="${leftWidth + middleWidth / 2}" y="13">${escapeXml(middleText)}</text>
     <text x="${leftWidth + middleWidth + rightWidth / 2}" y="14" fill="#010101" fill-opacity=".3">${escapeXml(rightText)}</text>
     <text x="${leftWidth + middleWidth + rightWidth / 2}" y="13">${escapeXml(rightText)}</text>
-  </g>
+  </g>${linkClose}
 </svg>`
 }
 

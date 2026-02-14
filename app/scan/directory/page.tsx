@@ -21,7 +21,7 @@ export default function DirectoryScanPage() {
         .from('skills')
         .select('*')
         .order('created_at', { ascending: false })
-      
+
       if (error) {
         setError(error.message)
       } else {
@@ -45,7 +45,7 @@ export default function DirectoryScanPage() {
           findings:findings(*)
         `)
         .in('id', scans.map(s => s.id))
-      
+
       if (!error && data) {
         setScans(prev => {
           // Update existing scans with new data, preserving order
@@ -102,8 +102,8 @@ export default function DirectoryScanPage() {
   }
 
   const toggleSkillSelection = (skillId: string) => {
-    setSelectedSkillIds(prev => 
-      prev.includes(skillId) 
+    setSelectedSkillIds(prev =>
+      prev.includes(skillId)
         ? prev.filter(id => id !== skillId)
         : [...prev, skillId]
     )
@@ -111,23 +111,22 @@ export default function DirectoryScanPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading skills...</p>
+          <p className="font-mono text-sm text-brand-muted">Loading...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-brand-bg">
       <AppNav />
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Directory Scan</h1>
-          <p className="mt-2 text-gray-600">
-            Select multiple skills to analyze in bulk. The scanner will check for data exfiltration, 
+          <h1 className="font-mono text-2xl font-bold text-brand-text">Directory Scan</h1>
+          <p className="mt-2 text-brand-muted">
+            Select multiple skills to analyze in bulk. The scanner will check for data exfiltration,
             behavior mismatches, and privilege escalation.
           </p>
         </div>
@@ -147,39 +146,39 @@ export default function DirectoryScanPage() {
           </div>
         )}
 
-        <div className="bg-white shadow rounded-lg mb-8">
+        <div className="bg-brand-surface border border-brand-border mb-8">
           <div className="px-4 py-5 sm:p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Select Skills</h2>
-            
+            <h2 className="font-mono text-lg font-bold text-brand-text mb-4">Select Skills</h2>
+
             {skills.length === 0 ? (
-              <p className="text-gray-500">No skills available. Upload some skills first.</p>
+              <p className="text-brand-muted">No skills available. Upload some skills first.</p>
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                   {skills.map(skill => (
-                    <div 
+                    <div
                       key={skill.id}
-                      className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      className={`border p-4 cursor-pointer transition-all ${
                         selectedSkillIds.includes(skill.id)
-                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          ? 'border-brand-accent bg-brand-accent-light'
+                          : 'border-brand-border hover:border-brand-border hover:bg-brand-bg'
                       }`}
                       onClick={() => toggleSkillSelection(skill.id)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-medium text-gray-900">{skill.name}</h3>
+                          <h3 className="font-mono text-base font-bold text-brand-text">{skill.name}</h3>
                           {skill.description && (
-                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{skill.description}</p>
+                            <p className="text-sm text-brand-muted mt-1 line-clamp-2">{skill.description}</p>
                           )}
-                          <p className="text-xs text-gray-500 mt-2">
+                          <p className="text-xs text-brand-muted mt-2">
                             File: {skill.file_path || 'N/A'}
                           </p>
                         </div>
-                        <div className={`ml-2 flex-shrink-0 w-5 h-5 rounded border ${
+                        <div className={`ml-2 flex-shrink-0 w-5 h-5 border ${
                           selectedSkillIds.includes(skill.id)
-                            ? 'bg-blue-600 border-blue-600'
-                            : 'border-gray-300'
+                            ? 'bg-brand-accent border-brand-accent'
+                            : 'border-brand-border'
                         }`}>
                           {selectedSkillIds.includes(skill.id) && (
                             <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -192,23 +191,17 @@ export default function DirectoryScanPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between border-t border-gray-200 pt-4">
-                  <div className="text-sm text-gray-600">
+                <div className="flex items-center justify-between border-t border-brand-border pt-4">
+                  <div className="text-sm text-brand-muted">
                     {selectedSkillIds.length} of {skills.length} skills selected
                   </div>
                   <button
                     onClick={handleScan}
                     disabled={selectedSkillIds.length === 0 || scanning}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center px-4 py-2 border border-transparent font-mono text-sm font-bold text-white bg-brand-accent hover:bg-brand-accent-hover focus:border-brand-accent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {scanning ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Starting...
-                      </>
+                      'Starting...'
                     ) : (
                       `Scan ${selectedSkillIds.length} Skill${selectedSkillIds.length !== 1 ? 's' : ''}`
                     )}
@@ -220,16 +213,16 @@ export default function DirectoryScanPage() {
         </div>
 
         {scans.length > 0 && (
-          <div className="bg-white shadow rounded-lg">
+          <div className="bg-brand-surface border border-brand-border">
             <div className="px-4 py-5 sm:p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Scans</h2>
+              <h2 className="font-mono text-lg font-bold text-brand-text mb-4">Recent Scans</h2>
               <div className="space-y-4">
                 {scans.map(scan => (
-                  <div key={scan.id} className="border rounded-lg p-4">
+                  <div key={scan.id} className="border border-brand-border p-4">
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="font-medium text-gray-900">{scan.skill.name}</h3>
-                        <p className="text-sm text-gray-500">
+                        <h3 className="font-mono text-base font-bold text-brand-text">{scan.skill.name}</h3>
+                        <p className="text-sm text-brand-muted">
                           Started: {new Date(scan.started_at).toLocaleString()}
                         </p>
                       </div>
@@ -251,7 +244,7 @@ export default function DirectoryScanPage() {
 
                     {scan.findings && scan.findings.length > 0 && (
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">
+                        <h4 className="font-mono text-base font-bold text-brand-text mb-2">
                           Findings ({scan.findings.length})
                         </h4>
                         <div className="space-y-3">
@@ -262,7 +255,7 @@ export default function DirectoryScanPage() {
                                           finding.severity === 'medium' ? '#eab308' : '#22c55e'
                             }}>
                               <div className="flex justify-between items-start">
-                                <span className="font-medium text-gray-900">{finding.title}</span>
+                                <span className="font-medium text-brand-text">{finding.title}</span>
                                 <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                                   finding.severity === 'critical' ? 'bg-red-100 text-red-800' :
                                   finding.severity === 'high' ? 'bg-orange-100 text-orange-800' :
@@ -272,19 +265,19 @@ export default function DirectoryScanPage() {
                                   {finding.severity}
                                 </span>
                               </div>
-                              <p className="text-sm text-gray-700 mt-1">{finding.description}</p>
+                              <p className="text-sm text-brand-muted mt-1">{finding.description}</p>
                               {finding.category && (
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="text-xs text-brand-muted mt-1">
                                   Category: {finding.category}
                                 </p>
                               )}
                               {finding.line_number && (
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs text-brand-muted">
                                   Line: {finding.line_number}
                                 </p>
                               )}
                               {finding.code_snippet && (
-                                <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                                <pre className="mt-2 text-xs bg-brand-bg p-2 rounded overflow-x-auto">
                                   <code>{finding.code_snippet}</code>
                                 </pre>
                               )}

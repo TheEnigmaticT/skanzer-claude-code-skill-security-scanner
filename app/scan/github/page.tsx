@@ -117,12 +117,12 @@ export default function GitHubScanPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-brand-bg">
       <AppNav />
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Scan from GitHub</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="font-mono text-2xl font-bold text-brand-text">Scan from GitHub</h1>
+          <p className="mt-2 text-brand-muted">
             Paste a public GitHub repository URL to scan its markdown skill files for security issues.
           </p>
         </div>
@@ -144,16 +144,16 @@ export default function GitHubScanPage() {
 
         {/* Step 1: URL Input */}
         {step === 'url' && (
-          <div className="bg-white shadow rounded-lg">
+          <div className="bg-brand-surface border border-brand-border">
             <div className="px-4 py-5 sm:p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Repository URL</h2>
+              <h2 className="font-mono text-lg font-bold text-brand-text mb-4">Repository URL</h2>
               <div className="flex gap-3">
                 <input
                   type="text"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://github.com/owner/repo"
-                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                  className="flex-1 border border-brand-border px-3 py-2 text-sm focus:border-brand-accent focus:outline-none"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && url.trim()) handleFetchFiles()
                   }}
@@ -161,23 +161,13 @@ export default function GitHubScanPage() {
                 <button
                   onClick={handleFetchFiles}
                   disabled={!url.trim() || loading}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center px-4 py-2 border border-transparent font-mono text-sm font-bold text-white bg-brand-accent hover:bg-brand-accent-hover focus:border-brand-accent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Fetching...
-                    </>
-                  ) : (
-                    'Fetch Files'
-                  )}
+                  {loading ? 'Fetching...' : 'Fetch Files'}
                 </button>
               </div>
-              <p className="mt-3 text-sm text-gray-500">
-                Works with public repositories. Set <code className="bg-gray-100 px-1 rounded">GITHUB_TOKEN</code> env var for private repos or higher rate limits.
+              <p className="mt-3 text-sm text-brand-muted">
+                Works with public repositories. Set <code className="bg-brand-bg px-1 rounded">GITHUB_TOKEN</code> env var for private repos or higher rate limits.
               </p>
             </div>
           </div>
@@ -185,57 +175,57 @@ export default function GitHubScanPage() {
 
         {/* Step 2: File Selection */}
         {step === 'select' && repoInfo && (
-          <div className="bg-white shadow rounded-lg">
+          <div className="bg-brand-surface border border-brand-border">
             <div className="px-4 py-5 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">
+                  <h2 className="font-mono text-lg font-bold text-brand-text">
                     {repoInfo.owner}/{repoInfo.repo}
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-brand-muted">
                     Branch: {repoInfo.branch} &middot; {files.length} markdown file{files.length !== 1 ? 's' : ''} found
                   </p>
                 </div>
                 <button
                   onClick={() => { setStep('url'); setFiles([]); setSelectedFiles([]); setRepoInfo(null); setError(null) }}
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  className="text-sm text-brand-accent hover:text-brand-accent-hover"
                 >
                   Change URL
                 </button>
               </div>
 
               {files.length === 0 ? (
-                <p className="text-gray-500">No markdown files found in this repository.</p>
+                <p className="text-brand-muted">No markdown files found in this repository.</p>
               ) : (
                 <>
                   <div className="flex items-center gap-3 mb-4">
                     <button
                       onClick={toggleAll}
-                      className="text-sm text-blue-600 hover:text-blue-800"
+                      className="text-sm text-brand-accent hover:text-brand-accent-hover"
                     >
                       {selectedFiles.length === files.length ? 'Deselect All' : 'Select All'}
                     </button>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-brand-muted">
                       {selectedFiles.length} of {files.length} selected
                     </span>
                   </div>
 
-                  <div className="border rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto mb-6">
+                  <div className="border border-brand-border divide-y divide-brand-border max-h-96 overflow-y-auto mb-6">
                     {files.map(file => (
                       <label
                         key={file.path}
-                        className={`flex items-center px-4 py-3 cursor-pointer hover:bg-gray-50 ${
-                          selectedFiles.includes(file.path) ? 'bg-blue-50' : ''
+                        className={`flex items-center px-4 py-3 cursor-pointer hover:bg-brand-bg ${
+                          selectedFiles.includes(file.path) ? 'bg-brand-accent-light' : ''
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={selectedFiles.includes(file.path)}
                           onChange={() => toggleFile(file.path)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          className="h-4 w-4 text-brand-accent border-brand-border rounded focus:border-brand-accent focus:outline-none"
                         />
-                        <span className="ml-3 flex-1 text-sm text-gray-900 font-mono">{file.path}</span>
-                        <span className="ml-2 text-xs text-gray-400">{formatSize(file.size)}</span>
+                        <span className="ml-3 flex-1 text-sm text-brand-text font-mono">{file.path}</span>
+                        <span className="ml-2 text-xs text-brand-muted">{formatSize(file.size)}</span>
                       </label>
                     ))}
                   </div>
@@ -244,7 +234,7 @@ export default function GitHubScanPage() {
                     <button
                       onClick={handleScan}
                       disabled={selectedFiles.length === 0}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center px-4 py-2 border border-transparent font-mono text-sm font-bold text-white bg-brand-accent hover:bg-brand-accent-hover focus:border-brand-accent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Scan {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}
                     </button>
@@ -259,13 +249,9 @@ export default function GitHubScanPage() {
         {step === 'results' && (
           <div className="space-y-6">
             {scanning && (
-              <div className="bg-white shadow rounded-lg px-4 py-5 sm:p-6">
+              <div className="bg-brand-surface border border-brand-border px-4 py-5 sm:p-6">
                 <div className="flex items-center">
-                  <svg className="animate-spin h-5 w-5 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span className="text-gray-700">{scanProgress}</span>
+                  <span className="font-mono text-sm text-brand-muted">{scanProgress}</span>
                 </div>
               </div>
             )}
@@ -273,26 +259,26 @@ export default function GitHubScanPage() {
             {!scanning && scans.length > 0 && (
               <>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-gray-900">
+                  <h2 className="font-mono text-lg font-bold text-brand-text">
                     Scan Results ({scans.length} file{scans.length !== 1 ? 's' : ''})
                   </h2>
                   <button
                     onClick={() => { setStep('url'); setScans([]); setFiles([]); setSelectedFiles([]); setRepoInfo(null); setError(null) }}
-                    className="text-sm text-blue-600 hover:text-blue-800"
+                    className="text-sm text-brand-accent hover:text-brand-accent-hover"
                   >
                     Scan Another Repo
                   </button>
                 </div>
 
-                <div className="bg-white shadow rounded-lg">
+                <div className="bg-brand-surface border border-brand-border">
                   <div className="px-4 py-5 sm:p-6">
                     <div className="space-y-4">
                       {scans.map(scan => (
-                        <div key={scan.id} className="border rounded-lg p-4">
+                        <div key={scan.id} className="border border-brand-border p-4">
                           <div className="flex justify-between items-start mb-3">
                             <div>
-                              <h3 className="font-medium text-gray-900">{scan.skill.name}</h3>
-                              <p className="text-sm text-gray-500">
+                              <h3 className="font-mono text-base font-bold text-brand-text">{scan.skill.name}</h3>
+                              <p className="text-sm text-brand-muted">
                                 {scan.skill.file_path}
                               </p>
                             </div>
@@ -314,7 +300,7 @@ export default function GitHubScanPage() {
 
                           {scan.findings && scan.findings.length > 0 && (
                             <div>
-                              <h4 className="font-medium text-gray-900 mb-2">
+                              <h4 className="font-mono text-base font-bold text-brand-text mb-2">
                                 Findings ({scan.findings.length})
                               </h4>
                               <div className="space-y-3">
@@ -325,7 +311,7 @@ export default function GitHubScanPage() {
                                                 finding.severity === 'medium' ? '#eab308' : '#22c55e'
                                   }}>
                                     <div className="flex justify-between items-start">
-                                      <span className="font-medium text-gray-900">{finding.title}</span>
+                                      <span className="font-medium text-brand-text">{finding.title}</span>
                                       <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                                         finding.severity === 'critical' ? 'bg-red-100 text-red-800' :
                                         finding.severity === 'high' ? 'bg-orange-100 text-orange-800' :
@@ -335,19 +321,19 @@ export default function GitHubScanPage() {
                                         {finding.severity}
                                       </span>
                                     </div>
-                                    <p className="text-sm text-gray-700 mt-1">{finding.description}</p>
+                                    <p className="text-sm text-brand-muted mt-1">{finding.description}</p>
                                     {finding.category && (
-                                      <p className="text-xs text-gray-500 mt-1">
+                                      <p className="text-xs text-brand-muted mt-1">
                                         Category: {finding.category}
                                       </p>
                                     )}
                                     {finding.line_number && (
-                                      <p className="text-xs text-gray-500">
+                                      <p className="text-xs text-brand-muted">
                                         Line: {finding.line_number}
                                       </p>
                                     )}
                                     {finding.code_snippet && (
-                                      <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                                      <pre className="mt-2 text-xs bg-brand-bg p-2 rounded overflow-x-auto">
                                         <code>{finding.code_snippet}</code>
                                       </pre>
                                     )}
@@ -391,15 +377,15 @@ export default function GitHubScanPage() {
                   }
 
                   return (
-                    <div className="bg-white shadow rounded-lg">
+                    <div className="bg-brand-surface border border-brand-border">
                       <div className="px-4 py-5 sm:p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Embed Badge</h3>
-                        <p className="text-sm text-gray-600 mb-4">
+                        <h3 className="font-mono text-base font-bold text-brand-text mb-4">Embed Badge</h3>
+                        <p className="text-sm text-brand-muted mb-4">
                           Add this badge to your repository README to show its security scan status.
                         </p>
 
                         {/* Badge Preview */}
-                        <div className="mb-6 p-4 bg-gray-50 rounded-lg flex items-center justify-center">
+                        <div className="mb-6 p-4 bg-brand-bg rounded-lg flex items-center justify-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={badgeUrl}
@@ -411,15 +397,15 @@ export default function GitHubScanPage() {
                         {/* Markdown Snippet */}
                         <div className="mb-4">
                           <div className="flex items-center justify-between mb-1">
-                            <label className="text-sm font-medium text-gray-700">Markdown</label>
+                            <label className="text-sm font-medium text-brand-muted">Markdown</label>
                             <button
                               onClick={() => copyToClipboard(mdSnippet, 'markdown')}
-                              className="text-xs text-blue-600 hover:text-blue-800"
+                              className="text-xs text-brand-accent hover:text-brand-accent-hover"
                             >
                               {copied === 'markdown' ? 'Copied!' : 'Copy'}
                             </button>
                           </div>
-                          <pre className="text-xs bg-gray-100 p-3 rounded overflow-x-auto select-all">
+                          <pre className="text-xs bg-brand-bg p-3 rounded overflow-x-auto select-all">
                             <code>{mdSnippet}</code>
                           </pre>
                         </div>
@@ -427,15 +413,15 @@ export default function GitHubScanPage() {
                         {/* HTML Snippet */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="text-sm font-medium text-gray-700">HTML</label>
+                            <label className="text-sm font-medium text-brand-muted">HTML</label>
                             <button
                               onClick={() => copyToClipboard(htmlSnippet, 'html')}
-                              className="text-xs text-blue-600 hover:text-blue-800"
+                              className="text-xs text-brand-accent hover:text-brand-accent-hover"
                             >
                               {copied === 'html' ? 'Copied!' : 'Copy'}
                             </button>
                           </div>
-                          <pre className="text-xs bg-gray-100 p-3 rounded overflow-x-auto select-all">
+                          <pre className="text-xs bg-brand-bg p-3 rounded overflow-x-auto select-all">
                             <code>{htmlSnippet}</code>
                           </pre>
                         </div>
@@ -447,7 +433,7 @@ export default function GitHubScanPage() {
             )}
 
             {!scanning && scans.length === 0 && !error && (
-              <div className="bg-white shadow rounded-lg px-4 py-5 sm:p-6 text-center text-gray-500">
+              <div className="bg-brand-surface border border-brand-border px-4 py-5 sm:p-6 text-center text-brand-muted">
                 No results to display.
               </div>
             )}
