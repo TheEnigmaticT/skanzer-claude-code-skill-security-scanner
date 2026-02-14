@@ -30,6 +30,12 @@ html, body {
   overflow-x: hidden;
 }
 
+/* Prevent long URLs/paths/strings from breaking layouts on mobile */
+a, code, pre, td, dd, p, span {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
 body {
   background: var(--brand-bg);
   color: var(--brand-text);
