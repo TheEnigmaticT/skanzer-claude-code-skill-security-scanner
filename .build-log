@@ -6568,3 +6568,1007 @@ Summarization failed for model openai/botty-step-flash: cannot schedule new futu
 Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
 summarizer unexpectedly failed for all models
 [19:56:10]   [1/10] Done (12999 bytes)
+[19:56:11]   [2/10] Building app/scan/file/page.tsx...
+[19:56:11]   [aider] Starting task...
+/Users/ct-mac-mini/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Warning: Input is not a terminal (fd=0).
+
+Warning for openai/botty-step-flash: Unknown context window size and costs, 
+using sane defaults.
+You can skip this check with --no-show-model-warnings
+
+https://aider.chat/docs/llms/warnings.html
+
+Creating empty file 
+/Users/ct-mac-mini/dev/skanzer-claude-code-skill-security-scanner-upload-/app/sc
+an/file/page.tsx
+Aider v0.82.3
+Model: openai/botty-step-flash with whole edit format
+Git repo: .git with 28 files
+Repo-map: using 1024 tokens, auto refresh
+Added app/scan/file/page.tsx to the chat.
+Added lib/supabase/client.ts to the chat (read-only).
+Added app/nav.tsx to the chat (read-only).
+Added lib/supabase/server.ts to the chat (read-only).
+Added lib/types.ts to the chat (read-only).
+
+
+--------------
+► **THINKING**
+
+The user wants me to build a page: `app/scan/file/page.tsx` for uploading a single markdown skill file for analysis.
+
+Let me understand the requirements:
+1. Purpose: Upload interface for single markdown skill file analysis
+2. App context: "Skanzer - Claude Code skill security scanner"
+3. Features to detect: data exfiltration, behavior vs description mismatches, privilege escalation
+4. Must fetch real data from Supabase using .from('table').select()
+5. Use types from lib/types.ts
+6. Style with Tailwind CSS - professional look
+7. Include loading and error states
+8. If there's a form, implement real submission with .insert() or .update()
+9. Use either server component or client component
+10. Make it fully functional, not a placeholder
+
+Looking at the provided files, I have:
+- lib/supabase/client.ts (for client-side Supabase)
+- lib/supabase/server.ts (for server-side Supabase)
+- lib/types.ts (with types like Skill, Scan, Finding, etc.)
+- app/nav.tsx (as reference for structure)
+
+The page should be for uploading a single markdown file. Based on the types, I see:
+- Skill: has content (string), file_path, name, description, etc.
+- Scan: has skill_id, status, etc.
+
+So the flow would be:
+1. User uploads a markdown file
+2. The file content is stored as a Skill (maybe with a name and description from the user)
+3. Then a Scan is created for that skill
+4. The scan analyzes the markdown content for suspicious patterns
+
+But wait, the requirement says "Upload interface for single markdown skill file analysis". So this page should allow users to:
+- Select a markdown file
+- Possibly provide a name/description
+- Submit for scanning
+- Show the scan results or status
+
+Let me think about the implementation:
+
+Option 1: Client component
+- Use 'use client' directive
+- Use createClient from lib/supabase/client
+- Handle file upload via form
+- On submit, insert the skill and then trigger a scan
+
+Option 2: Server component
+- No 'use client' directive
+- Use createClient from lib/supabase/server
+- But file uploads typically need client-side handling because of file input
+
+Actually, for file uploads, we usually need a client component to handle the file input and read the file content. However, we could also use a server action if we want to keep it as a server component. But the requirement says "Use either server component or client component". Given that we need to handle file upload, a client component might be easier.
+
+But let's check the app structure. The user provided app/nav.tsx which is a client component. There's also app/dashboard/page.tsx (mentioned in the summary) which likely is a client component too based on the useState usage.
+
+I'll go with a client component for this upload page because:
+- File input requires client-side interaction
+- We can show real-time feedback (loading, errors)
+- We can use Supabase client directly
+
+Plan:
+1. Create a client component with 'use client'
+2. Import necessary types: Skill, Scan, etc. from '@/lib/types'
+3. Import createClient from '@/lib/supabase/client'
+4. State variables: file, name, description, uploading, scanId, scanStatus, error, etc.
+5. Form with file input, text inputs for name/description, submit button
+6. On submit: 
+   - Read file content
+   - Insert into skills table (with user_id from session)
+   - Then insert into scans table with skill_id and status 'pending' or 'scanning'
+   - Maybe trigger the scan process (but that might be a separate backend process)
+7. After submission, show the scan status and maybe redirect to dashboard or show results
+
+But the requirement says "Make it fully functional, not a placeholder". So we need to actually implement the upload and scanning. However, the scanning logic itself might be a separate backend process. The page just needs to upload the file and create a scan record. The actual analysis might happen asynchronously.
+
+Let's think about the database schema from the types:
+- Skill: id, user_id, name, description?, content, file_path?, created_at, updated_at
+- Scan: id, skill_id, status, started_at, completed_at?, error_message?
+- Finding: id, scan_id, skill_id, category, severity, title, description, line_number?, code_snippet?, confidence?, created_at
+
+So the flow:
+1. User uploads a markdown file.
+2. We create a Skill record with the file content (maybe also store file_path if we save the file somewhere, but we can just store content in the database).
+3. We create a Scan record with status 'pending' or 'scanning'.
+4. Then we need to actually run the scan. That could be a separate process (maybe a Supabase Edge Function or a server-side process). But the page itself doesn't need to implement the scanning logic; it just needs to trigger it. However, the requirement says "implement real submission with .insert() or .update()". So we need to actually insert the skill and scan records.
+
+But how do we trigger the actual scanning? Possibly we have a background worker that picks up scans with status 'pending' and processes them. Or we could call an API route that does the scanning synchronously. But the requirement doesn't specify. Since this is a page for uploading, I'll assume that after inserting the skill and scan, we either:
+- Redirect to the scan results page (maybe /scan/[id]) to show status
+- Or show the status on this page and poll for updates
+
+Given that the app has a dashboard that shows scans, maybe we just create the scan and then redirect to dashboard or to a scan detail page.
+
+But the requirement says "Upload interface for single markdown skill file analysis". So the page should be focused on uploading and maybe showing immediate feedback.
+
+Let's design the page:
+
+- Title: "Upload Skill File"
+- Form:
+  - File input (accept .md)
+  - Name input (text)
+  - Description input (textarea, optional)
+  - Submit button
+- After submit:
+  - Show loading spinner
+  - On success: show success message and maybe a link to view the scan
+  - On error: show error
+
+We also need to get the current user's session to set user_id on the skill. So we need to get the session. In a client component, we can use supabase.auth.getSession().
+
+Implementation steps:
+
+1. Set up state:
+   - file: File | null
+   - name: string
+   - description: string
+   - uploading: boolean
+   - error: string | null
+   - scanId: string | null (after creation)
+   - skillId: string | null
+
+2. Handle file change: set file
+
+3. Handle form submit:
+   - Prevent default
+   - Validate file and name
+   - Set uploading true, clear error
+   - Get session
+   - If no session, set error "You must be logged in"
+   - Read file as text
+   - Insert into skills table:
+     ```
+     const { data: skill, error: skillError } = await supabase
+       .from('skills')
+       .insert({
+         user_id: session.user.id,
+         name,
+         description: description || null,
+         content: fileContent,
+         // file_path maybe we can set to file.name or leave null
+       })
+       .select()
+       .single()
+     ```
+   - If skillError, set error and return
+   - Then insert into scans table:
+     ```
+     const { data: scan, error: scanError } = await supabase
+       .from('scans')
+       .insert({
+         skill_id: skill.id,
+         status: 'pending', // or 'scanning' if we want to start immediately
+       })
+       .select()
+       .single()
+     ```
+   - If scanError, maybe rollback? But we can just show error.
+   - Set scanId and skillId, maybe redirect or show success.
+
+4. After successful upload, we could show a message: "Skill uploaded and scan started. View your scans in the dashboard." with a link to /dashboard.
+
+But the requirement says "If this page has a form, implement real submission with .insert() or .update()". So we are doing that.
+
+We also need to consider that the scanning might be asynchronous. The scan record's status will be updated by a background process. So we don't need to wait for the scan to complete on this page.
+
+Now, styling: Use Tailwind CSS to make it professional. We can look at the nav.tsx for styling patterns. It uses:
+- border-b, bg-white, max-w-7xl, mx-auto, px-4, etc.
+- For buttons: bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium
+- For inputs: we should style them similarly.
+
+We'll create a clean form with proper spacing.
+
+Also, we need to import types. The types are in lib/types.ts. We'll import:
+- import { Skill, Scan } from '@/lib/types'
+
+But we might not need to explicitly type everything; TypeScript can infer.
+
+Now, the file content: The user provided an empty file: `app/scan/file/page.tsx` with just triple backticks. So we need to create the full content.
+
+Let's write the code:
+
+```tsx
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { Skill, Scan } from '@/lib/types'
+
+export default function UploadSkillFilePage() {
+  const [file, setFile] = useState<File | null>(null)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [scanId, setScanId] = useState<string | null>(null)
+  const router = useRouter()
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0])
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!file) {
+      setError('Please select a file')
+      return
+    }
+    if (!name.trim()) {
+      setError('Please enter a name for the skill')
+      return
+    }
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session) {
+        setError('You must be logged in to upload a skill')
+        setUploading(false)
+        return
+      }
+
+      // Read file content
+      const fileContent = await file.text()
+
+      // Insert skill
+      const { data: skill, error: skillError } = await supabase
+        .from('skills')
+        .insert({
+          user_id: session.user.id,
+          name: name.trim(),
+          description: description.trim() || null,
+          content: fileContent,
+          // file_path: file.name // optional
+        })
+        .select()
+        .single()
+
+      if (skillError) {
+        throw new Error(skillError.message)
+      }
+
+      // Insert scan
+      const { data: scan, error: scanError } = await supabase
+        .from('scans')
+        .insert({
+          skill_id: skill.id,
+          status: 'pending',
+        })
+        .select()
+        .single()
+
+      if (scanError) {
+        throw new Error(scanError.message)
+      }
+
+      setScanId(scan.id)
+      // Optionally redirect after a delay or show a link
+      // router.push(`/scan/${scan.id}`) // if we have a scan detail page
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during upload')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Upload Skill File</h1>
+          <p className="mt-2 text-gray-600">
+            Upload a Claude Code skill markdown file for security analysis.
+          </p>
+        </div>
+
+        <div className="bg-white shadow rounded-lg p-6">
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+
+          {scanId ? (
+            <div className="text-center">
+              <div className="mb-4">
+                <svg className="mx-auto h-12 w-12 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">Upload Successful</h3>
+              <p className="mt-2 text-gray-600">
+                Your skill has been uploaded and scan has been initiated.
+              </p>
+              <div className="mt-6">
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                >
+                  Go to Dashboard
+                </button>
+                <button
+                  onClick={() => router.push(`/scan/${scanId}`)}
+                  className="ml-4 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                >
+                  View Scan Details
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="file" className="block text-sm font-medium text-gray-700">
+                  Skill File (Markdown)
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="file"
+                    name="file"
+                    type="file"
+                    accept=".md,.markdown"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+                <p className="mt-2 text-sm text-gray-500">
+                  Upload a Claude Code skill markdown file. The file will be analyzed for security issues.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Skill Name
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                  Description (Optional)
+                </label>
+                <div className="mt-1">
+                  <textarea
+                    id="description"
+                    name="description"
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    'Upload and Scan'
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-blue-800">What gets scanned?</h3>
+          <ul className="mt-2 text-sm text-blue-700 list-disc list-inside">
+            <li>Data exfiltration attempts (HTTP calls, file writes outside workspace, environment variable access)</li>
+            <li>Behavior vs description mismatches (actions vs stated purpose)</li>
+            <li>Privilege escalation (sudo, dangerous bash commands)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+But wait, we need to consider that the file content might be large. Using file.text() is fine for moderate sizes. Also, we should handle errors properly.
+
+Also, we need to ensure that the skills table has columns: user_id, name, description, content, file_path? The types show file_path as optional. We can store the file name in file_path or leave it null. I'll include file_path: file.name.
+
+But the type definition for Skill includes file_path?: string. So it's optional. I'll set it to file.name.
+
+Also, we need to consider that the scan might be triggered automatically when a scan record is inserted? That would be a separate backend process. We don't need to implement that here; we just insert the scan with status 'pending'. The background worker will pick it up.
+
+Now, about the redirect: The requirement says "Make it fully functional". After upload, we show a success message with buttons to go to dashboard or view scan details. But we don't have a scan detail page? The user's file list includes app/dashboard/page.tsx but not a scan detail page. However, the nav.tsx has a link to "/dashboard" and "/skills/new". There's no explicit scan detail page. But we can still link to /dashboard which shows recent scans. Or we could link to /scan/[id] if that page exists. But the user hasn't provided that file. So maybe we should just redirect to dashboard.
+
+Alternatively, we could show the scan status on this page by polling. But that might be more complex. Since the requirement is to build an upload interface, it's acceptable to redirect to dashboard after upload.
+
+But the user said "If this page has a form, implement real submission with .insert() or .update()". We are doing that. And we are showing loading and error states.
+
+Now, let's check if we need to import useRouter. We are using it for navigation. That's fine.
+
+Also, we need to ensure that the Supabase tables exist. The user provided a migration file: supabase/migrations/001_initial_schema.sql. We should check that the skills and scans tables are defined there. But we don't have the content. However, from the types, we can infer the columns. So it's safe.
+
+One more thing: The file input accepts .md and .markdown. That's fine.
+
+Now, about styling: I used Tailwind classes that are consistent with the nav.tsx style. For example, buttons use similar classes. The form uses standard Tailwind form styling.
+
+I also added a section at the bottom explaining what gets scanned, which is helpful.
+
+Now, is there any need for server component? The requirement says we can use either. I chose client component because of file upload. But we could also use a server action with a server component. However, file uploads in Next.js 14 with server actions are possible but more complex. Client component is straightforward.
+
+But wait: The user said "Use either server component (createClient from lib/supabase/server.ts) or client component ('use client' + createClient from lib/supabase/client.ts)". So we are using client component correctly.
+
+Now, let's double-check the imports:
+- 'use client' at top
+- useState, useRouter from 'react' and 'next/navigation'
+- createClient from '@/lib/supabase/client'
+- types from '@/lib/types'
+
+All good.
+
+Now, the file is empty initially. We are providing the full content.
+
+But the user said: "To suggest changes to a file you MUST return the entire content of the file." So we need to output the entire file content in the specified format.
+
+Thus, the answer should be:
+
+app/scan/file/page.tsx
+```
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { Skill, Scan } from '@/lib/types'
+
+export default function UploadSkillFilePage() {
+  const [file, setFile] = useState<File | null>(null)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [scanId, setScanId] = useState<string | null>(null)
+  const router = useRouter()
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0])
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!file) {
+      setError('Please select a file')
+      return
+    }
+    if (!name.trim()) {
+      setError('Please enter a name for the skill')
+      return
+    }
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session) {
+        setError('You must be logged in to upload a skill')
+        setUploading(false)
+        return
+      }
+
+      // Read file content
+      const fileContent = await file.text()
+
+      // Insert skill
+      const { data: skill, error: skillError } = await supabase
+        .from('skills')
+        .insert({
+          user_id: session.user.id,
+          name: name.trim(),
+          description: description.trim() || null,
+          content: fileContent,
+          file_path: file.name,
+        })
+        .select()
+        .single()
+
+      if (skillError) {
+        throw new Error(skillError.message)
+      }
+
+      // Insert scan
+      const { data: scan, error: scanError } = await supabase
+        .from('scans')
+        .insert({
+          skill_id: skill.id,
+          status: 'pending',
+        })
+        .select()
+        .single()
+
+      if (scanError) {
+        throw new Error(scanError.message)
+      }
+
+      setScanId(scan.id)
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during upload')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Upload Skill File</h1>
+          <p className="mt-2 text-gray-600">
+            Upload a Claude Code skill markdown file for security analysis.
+          </p>
+        </div>
+
+        <div className="bg-white shadow rounded-lg p-6">
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+
+          {scanId ? (
+            <div className="text-center">
+              <div className="mb-4">
+                <svg className="mx-auto h-12 w-12 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">Upload Successful</h3>
+              <p className="mt-2 text-gray-600">
+                Your skill has been uploaded and scan has been initiated.
+              </p>
+              <div className="mt-6">
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                >
+                  Go to Dashboard
+                </button>
+                <button
+                  onClick={() => router.push(`/scan/${scanId}`)}
+                  className="ml-4 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                >
+                  View Scan Details
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="file" className="block text-sm font-medium text-gray-700">
+                  Skill File (Markdown)
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="file"
+                    name="file"
+                    type="file"
+                    accept=".md,.markdown"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+                <p className="mt-2 text-sm text-gray-500">
+                  Upload a Claude Code skill markdown file. The file will be analyzed for security issues.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Skill Name
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                  Description (Optional)
+                </label>
+                <div className="mt-1">
+                  <textarea
+                    id="description"
+                    name="description"
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    'Upload and Scan'
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-blue-800">What gets scanned?</h3>
+          <ul className="mt-2 text-sm text-blue-700 list-disc list-inside">
+            <li>Data exfiltration attempts (HTTP calls, file writes outside workspace, environment variable access)</li>
+            <li>Behavior vs description mismatches (actions vs stated purpose)</li>
+            <li>Privilege escalation (sudo, dangerous bash commands)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+But wait, we need to consider that the file might be large and reading it with file.text() could be memory intensive. But for typical markdown files, it's fine.
+
+Also, we should handle the case where the user cancels the upload? Not necessary.
+
+One more thing: The button "View Scan Details" links to `/scan/${scanId}`. But we don't know if that route exists. The user's file list doesn't show a scan detail page. However, the nav.tsx has a link to "/dashboard" and "/skills/new". There's no mention of a scan detail page. But the requirement says "Dashboard shows scan results". So maybe the scan details are on the dashboard. So we could just link to dashboard and maybe highlight the new scan. But the button "View Scan Details" might be misleading. We could change it to "View in Dashboard" or just remove it. But the user said "Make it fully functional". Having a link to a non-existent page would cause a 404. So we should either:
+- Only show "Go to Dashboard" button.
+- Or if we want to show scan details, we need to create that page. But the user hasn't asked for that.
+
+Given the context, I think it's safer to only provide a link to the dashboard. The user can see the scan status there. So I'll remove the "View Scan Details" button and just have "Go to Dashboard".
+
+But the requirement says "If this page has a form, implement real submission with .insert() or .update()". We are doing that. The success state shows a message and a button to go to dashboard. That's fine.
+
+Alternatively, we could automatically redirect after a few seconds. But not necessary.
+
+Let's adjust: In the success state, only show one button: "Go to Dashboard".
+
+Also, we might want to clear the form after successful upload? Not needed because we show success message.
+
+Now, about the file_path: I set it to file.name. That's fine.
+
+Also, we should consider that the skill content might be very large. Supabase has a limit on row size (typically 1MB for free tier). But that's okay.
+
+Now, let's check if we need to import any other types. We imported Skill and Scan but we don't use them directly in the component because we are using any from supabase responses. But it's good to import for type safety if we want to type the responses. However, we are using .select().single() which returns data of type Skill and Scan respectively. We could type them:
+
+```tsx
+const { data: skill, error: skillError } = await supabase
+  .from('skills')
+  .insert({ ... })
+  .select()
+  .single<Skill>()
+```
+
+But the supabase client doesn't have a generic .select<T>()? Actually, the Supabase JS client has a generic parameter for select. But we can also cast. However, to keep it simple, we can just use any or rely on inference. Since we have the types, we can use:
+
+```tsx
+const { data: skill, error: skillError } = await supabase
+  .from('skills')
+  .insert({ ... })
+  .select<Skill>()
+  .single()
+```
+
+But the .select() method can take a type parameter. However, the supabase client's type definitions might not support that directly. Actually, in the latest @supabase/supabase-js, you can do .select<Skill>('*') but we are not selecting all columns? We are inserting and then selecting the inserted row. We can do .select('*') and then type it. But it's not critical.
+
+I'll leave it as is without explicit typing because the requirement is to make it functional, not necessarily fully typed. But we did import the types.
+
+Now, about the loading state: We have uploading state that disables the button and shows a spinner. That's good.
+
+Also, we should handle session error properly.
+
+One more thing: The file input's className uses Tailwind's file input styling. That's fine.
+
+Now, let's ensure the page is fully functional. The form submission will:
+- Check file and name
+- Get session
+- Read file
+- Insert skill
+- Insert scan
+- Show success
+
+If any step fails, show error.
+
+That's functional.
+
+Now, the user might want to see the scan status after upload. But we don't have a scan detail page. So we just direct to dashboard.
+
+But the dashboard page (from the summary) shows recent findings and stats. It likely shows scans too. So that's fine.
+
+Now, I'll produce the final file listing.
+
+But wait: The user said "Build the page: app/scan/file/page.tsx". So the path is exactly that. We need to output the entire content.
+
+I'll write the code as above with the adjustment: only one button in success state.
+
+Also, I'll add a check for file type? Not necessary, but we can trust the accept attribute.
+
+Now, let's write the final answer.
+
+------------
+► **ANSWER**
+
+app/scan/file/page.tsx
+```
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+
+export default function UploadSkillFilePage() {
+  const [file, setFile] = useState<File | null>(null)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [scanId, setScanId] = useState<string | null>(null)
+  const router = useRouter()
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0])
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!file) {
+      setError('Please select a file')
+      return
+    }
+    if (!name.trim()) {
+      setError('Please enter a name for the skill')
+      return
+    }
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session) {
+        setError('You must be logged in to upload a skill')
+        setUploading(false)
+        return
+      }
+
+      // Read file content
+      const fileContent = await file.text()
+
+      // Insert skill
+      const { data: skill, error: skillError } = await supabase
+        .from('skills')
+        .insert({
+          user_id: session.user.id,
+          name: name.trim(),
+          description: description.trim() || null,
+          content: fileContent,
+          file_path: file.name,
+        })
+        .select()
+        .single()
+
+      if (skillError) {
+        throw new Error(skillError.message)
+      }
+
+      // Insert scan
+      const { data: scan, error: scanError } = await supabase
+        .from('scans')
+        .insert({
+          skill_id: skill.id,
+          status: 'pending',
+        })
+        .select()
+        .single()
+
+      if (scanError) {
+        throw new Error(scanError.message)
+      }
+
+      setScanId(scan.id)
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during upload')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Upload Skill File</h1>
+          <p className="mt-2 text-gray-600">
+            Upload a Claude Code skill markdown file for security analysis.
+          </p>
+        </div>
+
+        <div className="bg-white shadow rounded-lg p-6">
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+
+          {scanId ? (
+            <div className="text-center">
+              <div className="mb-4">
+                <svg className="mx-auto h-12 w-12 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">Upload Successful</h3>
+              <p className="mt-2 text-gray-600">
+                Your skill has been uploaded and scan has been initiated.
+              </p>
+              <div className="mt-6">
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                >
+                  Go to Dashboard
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="file" className="block text-sm font-medium text-gray-700">
+                  Skill File (Markdown)
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="file"
+                    name="file"
+                    type="file"
+                    accept=".md,.markdown"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+                <p className="mt-2 text-sm text-gray-500">
+                  Upload a Claude Code skill markdown file. The file will be analyzed for security issues.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Skill Name
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                  Description (Optional)
+                </label>
+                <div className="mt-1">
+                  <textarea
+                    id="description"
+                    name="description"
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    'Upload and Scan'
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-blue-800">What gets scanned?</h3>
+          <ul className="mt-2 text-sm text-blue-700 list-disc list-inside">
+            <li>Data exfiltration attempts (HTTP calls, file writes outside workspace, environment variable access)</li>
+            <li>Behavior vs description mismatches (actions vs stated purpose)</li>
+            <li>Privilege escalation (sudo, dangerous bash commands)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+Tokens: 2.9k sent, 9.6k received.
+Applied edit to app/scan/file/page.tsx
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+Summarization failed for model openai/botty-step-flash: cannot schedule new futures after shutdown
+summarizer unexpectedly failed for all models
+[19:57:20]   [2/10] Done (8079 bytes)
