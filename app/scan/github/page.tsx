@@ -37,6 +37,7 @@ export default function GitHubScanPage() {
   const [scanProgress, setScanProgress] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [failedFiles, setFailedFiles] = useState<string[]>([])
 
   const handleFetchFiles = async () => {
     setLoading(true)
@@ -67,26 +68,21 @@ export default function GitHubScanPage() {
     }
   }
 
-  const handleScan = async () => {
-    if (!repoInfo || selectedFiles.length === 0) return
-
-    setScanning(true)
-    setError(null)
-    setScans([])
-    setStep('results')
+  const scanBatches = async (filesToScan: string[], label: string): Promise<string[]> => {
+    if (!repoInfo) return filesToScan
 
     const BATCH_SIZE = 50
-    const chunks = chunkArray(selectedFiles, BATCH_SIZE)
-    const totalFiles = selectedFiles.length
+    const chunks = chunkArray(filesToScan, BATCH_SIZE)
+    const totalFiles = filesToScan.length
     let filesProcessed = 0
-    let batchErrors = 0
+    const failed: string[] = []
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]
       setScanProgress(
         chunks.length === 1
-          ? `Scanning ${totalFiles} file${totalFiles !== 1 ? 's' : ''}...`
-          : `Scanning batch ${i + 1}/${chunks.length} (${filesProcessed + chunk.length} of ${totalFiles} files)...`
+          ? `${label} ${totalFiles} file${totalFiles !== 1 ? 's' : ''}...`
+          : `${label} batch ${i + 1}/${chunks.length} (${filesProcessed + chunk.length} of ${totalFiles} files)...`
       )
 
       try {
@@ -105,22 +101,61 @@ export default function GitHubScanPage() {
 
         if (!res.ok) {
           console.error(`Batch ${i + 1} failed:`, data.error)
-          batchErrors++
+          failed.push(...chunk)
         } else {
           setScans(prev => [...prev, ...(data.scans || [])])
         }
       } catch (err) {
         console.error(`Batch ${i + 1} network error:`, err)
-        batchErrors++
+        failed.push(...chunk)
       }
 
       filesProcessed += chunk.length
     }
 
-    if (batchErrors > 0 && batchErrors === chunks.length) {
-      setError('All batches failed. Please try again.')
-    } else if (batchErrors > 0) {
-      setError(`${batchErrors} of ${chunks.length} batches failed. Partial results shown.`)
+    return failed
+  }
+
+  const handleScan = async () => {
+    if (!repoInfo || selectedFiles.length === 0) return
+
+    setScanning(true)
+    setError(null)
+    setScans([])
+    setFailedFiles([])
+    setStep('results')
+
+    // First pass
+    let failed = await scanBatches(selectedFiles, 'Scanning')
+
+    // Auto-retry failed batches once
+    if (failed.length > 0 && failed.length < selectedFiles.length) {
+      setScanProgress(`Retrying ${failed.length} failed file${failed.length !== 1 ? 's' : ''}...`)
+      failed = await scanBatches(failed, 'Retrying')
+    }
+
+    if (failed.length > 0) {
+      setFailedFiles(failed)
+      setError(`${failed.length} file${failed.length !== 1 ? 's' : ''} failed to scan. You can retry them below.`)
+    }
+
+    setScanProgress('')
+    setScanning(false)
+  }
+
+  const handleRetryFailed = async () => {
+    if (!repoInfo || failedFiles.length === 0) return
+
+    setScanning(true)
+    setError(null)
+
+    const failed = await scanBatches(failedFiles, 'Retrying')
+
+    if (failed.length > 0) {
+      setFailedFiles(failed)
+      setError(`${failed.length} file${failed.length !== 1 ? 's' : ''} still failing.`)
+    } else {
+      setFailedFiles([])
     }
 
     setScanProgress('')
@@ -167,8 +202,16 @@ export default function GitHubScanPage() {
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
               </div>
-              <div className="ml-3">
+              <div className="ml-3 flex items-center gap-3">
                 <p className="text-sm text-red-700">{error}</p>
+                {failedFiles.length > 0 && !scanning && (
+                  <button
+                    onClick={handleRetryFailed}
+                    className="shrink-0 px-3 py-1 font-mono text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-hover transition-colors"
+                  >
+                    Retry {failedFiles.length} file{failedFiles.length !== 1 ? 's' : ''}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -309,7 +352,7 @@ export default function GitHubScanPage() {
                   <div className="bg-brand-accent-light border border-brand-accent p-4">
                     <a
                       href={`/repo/${repoInfo.owner}/${repoInfo.repo}`}
-                      className="inline-flex items-center font-mono text-sm font-bold text-brand-accent hover:text-brand-accent-hover"
+                      className="font-mono text-sm font-bold text-brand-accent hover:text-brand-accent-hover break-words"
                     >
                       View Repository Report for {repoInfo.owner}/{repoInfo.repo} &rarr;
                     </a>

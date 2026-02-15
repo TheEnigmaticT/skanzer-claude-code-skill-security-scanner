@@ -7,11 +7,14 @@ import { useState } from 'react'
 
 const navItems = [
   { href: '/dashboard', label: 'dashboard' },
-  { href: '/scan/file', label: 'file' },
-  { href: '/scan/directory', label: 'directory' },
-  { href: '/scan/github', label: 'github' },
+  { href: '/scan/github', label: 'scan' },
   { href: '/history', label: 'history' },
   { href: '/settings', label: 'settings' },
+]
+
+const moreScans = [
+  { href: '/scan/file', label: 'file upload' },
+  { href: '/scan/directory', label: 'directory' },
 ]
 
 export default function AppNav() {
@@ -19,6 +22,7 @@ export default function AppNav() {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
+  const [scanMenu, setScanMenu] = useState(false)
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -37,7 +41,9 @@ export default function AppNav() {
             {/* Desktop nav */}
             <div className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
+                const isActive = item.href === '/scan/github'
+                  ? pathname?.startsWith('/scan/')
+                  : pathname === item.href || pathname?.startsWith(item.href + '/')
                 return (
                   <Link
                     key={item.href}
@@ -52,6 +58,35 @@ export default function AppNav() {
                   </Link>
                 )
               })}
+              <div className="relative">
+                <button
+                  onClick={() => setScanMenu(!scanMenu)}
+                  className="px-3 py-1.5 font-mono text-xs font-medium text-brand-muted hover:text-brand-text hover:bg-brand-accent-light/50 transition-colors"
+                >
+                  more ▾
+                </button>
+                {scanMenu && (
+                  <div className="absolute top-full left-0 mt-1 bg-brand-surface border border-brand-border shadow-sm z-50 min-w-[140px]">
+                    {moreScans.map((item) => {
+                      const isActive = pathname === item.href
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setScanMenu(false)}
+                          className={`block px-3 py-2 font-mono text-xs font-medium transition-colors ${
+                            isActive
+                              ? 'bg-brand-accent-light text-brand-accent'
+                              : 'text-brand-muted hover:text-brand-text hover:bg-brand-accent-light/50'
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -76,13 +111,32 @@ export default function AppNav() {
       {open && (
         <div className="md:hidden border-t border-brand-border bg-brand-surface px-4 py-3 space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
+            const isActive = item.href === '/scan/github'
+              ? pathname?.startsWith('/scan/')
+              : pathname === item.href || pathname?.startsWith(item.href + '/')
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={`block px-3 py-2 font-mono text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-brand-accent-light text-brand-accent'
+                    : 'text-brand-muted hover:text-brand-text hover:bg-brand-accent-light/50'
+                }`}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
+          {moreScans.map((item) => {
+            const isActive = pathname === item.href
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className={`block px-3 py-2 pl-6 font-mono text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-brand-accent-light text-brand-accent'
                     : 'text-brand-muted hover:text-brand-text hover:bg-brand-accent-light/50'
