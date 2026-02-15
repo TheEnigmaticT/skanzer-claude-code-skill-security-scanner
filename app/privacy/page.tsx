@@ -96,7 +96,7 @@ export default function PrivacyPage() {
               <li>Withdraw consent for data processing</li>
             </ul>
             <p className="mt-2">
-              To exercise these rights, contact us at the email below.
+              To exercise these rights, reach out via the contact info below.
             </p>
           </section>
 
@@ -124,9 +124,9 @@ export default function PrivacyPage() {
           <section>
             <h2 className="font-mono text-base font-bold text-brand-text mb-2">12. Contact</h2>
             <p>
-              Questions about this policy? Contact us at{' '}
-              <a href="mailto:hello@crowdtamers.com" className="text-brand-accent hover:text-brand-accent-hover">
-                hello@crowdtamers.com
+              Questions about this policy? Reach out to{' '}
+              <a href="https://x.com/trevorlongino" className="text-brand-accent hover:text-brand-accent-hover">
+                @trevorlongino on X
               </a>.
             </p>
           </section>

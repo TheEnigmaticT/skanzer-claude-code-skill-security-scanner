@@ -100,9 +100,9 @@ export default function TermsPage() {
           <section>
             <h2 className="font-mono text-base font-bold text-brand-text mb-2">11. Contact</h2>
             <p>
-              Questions about these Terms? Contact us at{' '}
-              <a href="mailto:hello@crowdtamers.com" className="text-brand-accent hover:text-brand-accent-hover">
-                hello@crowdtamers.com
+              Questions about these Terms? Reach out to{' '}
+              <a href="https://x.com/trevorlongino" className="text-brand-accent hover:text-brand-accent-hover">
+                @trevorlongino on X
               </a>.
             </p>
           </section>
