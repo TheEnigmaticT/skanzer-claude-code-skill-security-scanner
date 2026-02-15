@@ -23,12 +23,20 @@ export default async function Home() {
         <span className="font-mono text-lg font-bold tracking-tight">
           skanzer
         </span>
-        <Link
-          href="/login"
-          className="font-mono text-sm text-brand-muted hover:text-brand-text transition-colors"
-        >
-          sign in
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link
+            href="/why"
+            className="font-mono text-sm text-brand-muted hover:text-brand-text transition-colors"
+          >
+            why skanzer
+          </Link>
+          <Link
+            href="/login"
+            className="font-mono text-sm text-brand-muted hover:text-brand-text transition-colors"
+          >
+            sign in
+          </Link>
+        </div>
       </nav>
 
       {/* Hero — left-aligned, no dark bg, no glow, no grid */}
