@@ -17,6 +17,14 @@ interface RepoInfo {
 
 type Step = 'url' | 'select' | 'results'
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size))
+  }
+  return chunks
+}
+
 export default function GitHubScanPage() {
   const [step, setStep] = useState<Step>('url')
   const [url, setUrl] = useState('')
@@ -64,35 +72,59 @@ export default function GitHubScanPage() {
 
     setScanning(true)
     setError(null)
-    setScanProgress(`Scanning ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}...`)
+    setScans([])
     setStep('results')
 
-    try {
-      const res = await fetch('/api/scan/github', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          owner: repoInfo.owner,
-          repo: repoInfo.repo,
-          branch: repoInfo.branch,
-          files: selectedFiles,
-        }),
-      })
+    const BATCH_SIZE = 50
+    const chunks = chunkArray(selectedFiles, BATCH_SIZE)
+    const totalFiles = selectedFiles.length
+    let filesProcessed = 0
+    let batchErrors = 0
 
-      const data = await res.json()
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      setScanProgress(
+        chunks.length === 1
+          ? `Scanning ${totalFiles} file${totalFiles !== 1 ? 's' : ''}...`
+          : `Scanning batch ${i + 1}/${chunks.length} (${filesProcessed + chunk.length} of ${totalFiles} files)...`
+      )
 
-      if (!res.ok) {
-        setError(data.error || 'Scan failed')
-        return
+      try {
+        const res = await fetch('/api/scan/github', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            owner: repoInfo.owner,
+            repo: repoInfo.repo,
+            branch: repoInfo.branch,
+            files: chunk,
+          }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          console.error(`Batch ${i + 1} failed:`, data.error)
+          batchErrors++
+        } else {
+          setScans(prev => [...prev, ...(data.scans || [])])
+        }
+      } catch (err) {
+        console.error(`Batch ${i + 1} network error:`, err)
+        batchErrors++
       }
 
-      setScans(data.scans || [])
-      setScanProgress('')
-    } catch {
-      setError('Network error during scan.')
-    } finally {
-      setScanning(false)
+      filesProcessed += chunk.length
     }
+
+    if (batchErrors > 0 && batchErrors === chunks.length) {
+      setError('All batches failed. Please try again.')
+    } else if (batchErrors > 0) {
+      setError(`${batchErrors} of ${chunks.length} batches failed. Partial results shown.`)
+    }
+
+    setScanProgress('')
+    setScanning(false)
   }
 
   const toggleFile = (path: string) => {
@@ -256,18 +288,20 @@ export default function GitHubScanPage() {
               </div>
             )}
 
-            {!scanning && scans.length > 0 && (
+            {scans.length > 0 && (
               <>
                 <div className="flex items-center justify-between">
                   <h2 className="font-mono text-lg font-bold text-brand-text">
                     Scan Results ({scans.length} file{scans.length !== 1 ? 's' : ''})
                   </h2>
-                  <button
-                    onClick={() => { setStep('url'); setScans([]); setFiles([]); setSelectedFiles([]); setRepoInfo(null); setError(null) }}
-                    className="text-sm text-brand-accent hover:text-brand-accent-hover"
-                  >
-                    Scan Another Repo
-                  </button>
+                  {!scanning && (
+                    <button
+                      onClick={() => { setStep('url'); setScans([]); setFiles([]); setSelectedFiles([]); setRepoInfo(null); setError(null) }}
+                      className="text-sm text-brand-accent hover:text-brand-accent-hover"
+                    >
+                      Scan Another Repo
+                    </button>
+                  )}
                 </div>
 
                 {/* Repo Report Link */}

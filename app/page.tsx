@@ -153,9 +153,14 @@ export default async function Home() {
 
       {/* Footer */}
       <footer className="border-t border-brand-border px-6 py-8">
-        <p className="text-center font-mono text-xs text-brand-muted">
-          skanzer &mdash; built with Next.js &amp; Supabase
-        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 font-mono text-xs text-brand-muted">
+          <span>skanzer &mdash; built with Next.js &amp; Supabase</span>
+          <span className="hidden sm:inline">&middot;</span>
+          <div className="flex gap-4">
+            <Link href="/terms" className="hover:text-brand-text transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-brand-text transition-colors">Privacy</Link>
+          </div>
+        </div>
       </footer>
     </div>
   );

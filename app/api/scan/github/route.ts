@@ -34,6 +34,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (files.length > 100) {
+      return NextResponse.json(
+        { error: 'Maximum 100 files per request. Use smaller batches.' },
+        { status: 400 }
+      )
+    }
+
     // Always resolve branch so raw.githubusercontent.com fetching works
     const resolvedBranch = branch || await getRepoDefaultBranch(owner, repo)
 
