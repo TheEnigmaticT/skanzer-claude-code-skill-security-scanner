@@ -48,41 +48,43 @@ function checkSkillStructure(
   const shellRatio = shellCommandLines / totalLines
 
   // No frontmatter AND no markdown headings — doesn't look like a skill
+  // Downgraded: some simple skills may omit structure; only suspicious on its own
   if (!hasFrontmatter && headingCount === 0) {
     findings.push({
       scan_id: scanId,
       skill_id: skillId,
-      category: 'malware',
-      severity: 'high',
+      category: 'other',
+      severity: 'medium',
       title: 'Missing skill structure',
       description: 'File has no YAML frontmatter and no markdown headings. Legitimate Claude Code skills use frontmatter (---) with name/description fields and markdown structure.',
-      confidence: 0.8
-    })
-  }
-
-  // Mostly code, very little prose — smells like a payload, not instructions
-  if (codeRatio > 0.7 && totalLines > 10) {
-    findings.push({
-      scan_id: scanId,
-      skill_id: skillId,
-      category: 'malware',
-      severity: 'high',
-      title: 'Unusually high code-to-prose ratio',
-      description: `${Math.round(codeRatio * 100)}% of non-empty lines are inside code blocks. Skills should be mostly natural-language instructions, not executable payloads.`,
       confidence: 0.7
     })
   }
 
-  // Lots of bare shell commands outside of code blocks
-  if (shellRatio > 0.5 && totalLines > 5) {
+  // Mostly code, very little prose — smells like a payload, not instructions
+  // Raised threshold: many legitimate skills are code-heavy (tutorials, devops)
+  if (codeRatio > 0.85 && totalLines > 10) {
     findings.push({
       scan_id: scanId,
       skill_id: skillId,
       category: 'malware',
-      severity: 'high',
+      severity: 'medium',
+      title: 'Unusually high code-to-prose ratio',
+      description: `${Math.round(codeRatio * 100)}% of non-empty lines are inside code blocks. Skills should be mostly natural-language instructions, not executable payloads.`,
+      confidence: 0.6
+    })
+  }
+
+  // Lots of bare shell commands outside of code blocks
+  if (shellRatio > 0.65 && totalLines > 5) {
+    findings.push({
+      scan_id: scanId,
+      skill_id: skillId,
+      category: 'malware',
+      severity: 'medium',
       title: 'Predominantly shell commands',
       description: `${Math.round(shellRatio * 100)}% of lines look like bare shell commands outside code blocks. This resembles a shell script, not a skill file.`,
-      confidence: 0.75
+      confidence: 0.65
     })
   }
 
@@ -135,9 +137,12 @@ function checkMalwarePatterns(
     }
 
     // Curl/wget piped to shell (dropper pattern)
-    if (/(curl|wget)\s+[^\|]*\|\s*(ba)?sh/i.test(line) ||
+    // Exclude safe pipe targets: jq, grep, head, tail, less, wc, sort, python -m json.tool, etc.
+    const safePipeTargets = /\|\s*(jq|grep|head|tail|less|more|wc|sort|uniq|tee|cat|python[23]?\s+-m\s+json\.tool)\b/i
+    if (!safePipeTargets.test(line) && (
+        /(curl|wget)\s+[^\|]*\|\s*(ba)?sh/i.test(line) ||
         /(curl|wget)\s+[^\|]*\|\s*python/i.test(line) ||
-        /(curl|wget)\s+[^\|]*\|\s*perl/i.test(line)) {
+        /(curl|wget)\s+[^\|]*\|\s*perl/i.test(line))) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
@@ -188,17 +193,19 @@ function checkMalwarePatterns(
     }
 
     // Large base64 blobs (likely embedded binary/payload)
-    if (/[A-Za-z0-9+/]{80,}={0,2}/.test(line) && !/https?:\/\//.test(line)) {
+    // Raised threshold to 200 chars — short base64 strings are common in
+    // configs, data URIs, and image references
+    if (/[A-Za-z0-9+/]{200,}={0,2}/.test(line) && !/https?:\/\//.test(line) && !/data:image\//i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
         category: 'malware',
-        severity: 'high',
+        severity: 'medium',
         title: 'Embedded encoded blob',
         description: 'Contains a large base64-encoded string that may be an embedded binary or obfuscated payload.',
         line_number: lineNum,
         code_snippet: snippet,
-        confidence: 0.7
+        confidence: 0.6
       })
     }
 
@@ -235,42 +242,99 @@ function checkMalwarePatterns(
       })
     }
 
-    // Cron/persistence mechanisms
+    // Persistence mechanisms — distinguish between system-level persistence
+    // (cron, systemd, launchd) and simple shell profile references
     if (/crontab\s+/i.test(line) ||
         /\/etc\/cron/i.test(line) ||
-        /systemctl\s+(enable|start)/i.test(line) ||
-        /launchctl\s+load/i.test(line) ||
-        /\.bashrc|\.bash_profile|\.zshrc|\.profile/i.test(line)) {
+        /launchctl\s+load/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
         category: 'malware',
         severity: 'high',
         title: 'Persistence mechanism',
-        description: 'Installs cron jobs, systemd services, launchd agents, or modifies shell profiles to survive reboots.',
+        description: 'Installs cron jobs or launchd agents to survive reboots.',
         line_number: lineNum,
         code_snippet: snippet,
         confidence: 0.8
       })
     }
+    // systemctl enable/start is common in devops — flag at medium
+    else if (/systemctl\s+(enable|start)/i.test(line)) {
+      findings.push({
+        scan_id: scanId,
+        skill_id: skillId,
+        category: 'behavior_mismatch',
+        severity: 'medium',
+        title: 'Service management',
+        description: 'Enables or starts system services. Common in deployment but worth reviewing.',
+        line_number: lineNum,
+        code_snippet: snippet,
+        confidence: 0.6
+      })
+    }
+    // Shell profile references are very common in setup/config skills
+    else if (/\.bashrc|\.bash_profile|\.zshrc|\.profile/i.test(line)) {
+      // Only flag if writing to profile (not just reading/sourcing)
+      if (/(>>|>\s*~|echo\s+.*>>|tee\s+-a)/i.test(line)) {
+        findings.push({
+          scan_id: scanId,
+          skill_id: skillId,
+          category: 'behavior_mismatch',
+          severity: 'medium',
+          title: 'Shell profile modification',
+          description: 'Writes to shell profile files. Common in setup scripts but could be used for persistence.',
+          line_number: lineNum,
+          code_snippet: snippet,
+          confidence: 0.65
+        })
+      }
+    }
 
-    // Credential harvesting
-    if (/\/etc\/shadow/i.test(line) ||
-        /\/etc\/passwd/i.test(line) ||
-        /\.ssh\/id_rsa/i.test(line) ||
-        /\.aws\/credentials/i.test(line) ||
-        /\.npmrc|\.pypirc|\.docker\/config\.json/i.test(line) ||
-        /keychain|credential.helper/i.test(line)) {
+    // Credential file access — distinguish between truly dangerous system
+    // files (shadow) and config files that security/devops skills may reference
+    const dangerousCredFiles = /\/etc\/shadow/i.test(line)
+    const sensitiveCredFiles = /\/etc\/passwd|\.ssh\/id_rsa|\.aws\/credentials|\.npmrc|\.pypirc|\.docker\/config\.json/i.test(line)
+    const credHelpers = /keychain|credential\.helper/i.test(line)
+    if (dangerousCredFiles) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
         category: 'malware',
         severity: 'critical',
-        title: 'Credential file access',
-        description: 'Accesses known credential storage locations (SSH keys, AWS creds, password files). Legitimate skills do not need these.',
+        title: 'Password file access',
+        description: 'Accesses /etc/shadow (password hashes). This is almost never legitimate in a skill.',
         line_number: lineNum,
         code_snippet: snippet,
-        confidence: 0.9
+        confidence: 0.95
+      })
+    } else if (sensitiveCredFiles) {
+      // Only critical if combined with network exfiltration
+      const hasExfil = /(curl|wget|fetch|axios|requests\.|http\.get|nc\s)/i.test(line)
+      findings.push({
+        scan_id: scanId,
+        skill_id: skillId,
+        category: hasExfil ? 'malware' : 'data_exfiltration',
+        severity: hasExfil ? 'critical' : 'high',
+        title: 'Credential file access',
+        description: hasExfil
+          ? 'Reads credential files and appears to send them over the network.'
+          : 'References credential file paths. May be legitimate for security scanning or configuration.',
+        line_number: lineNum,
+        code_snippet: snippet,
+        confidence: hasExfil ? 0.9 : 0.7
+      })
+    } else if (credHelpers) {
+      findings.push({
+        scan_id: scanId,
+        skill_id: skillId,
+        category: 'data_exfiltration',
+        severity: 'medium',
+        title: 'Credential helper reference',
+        description: 'References credential helpers. Common in git configuration contexts.',
+        line_number: lineNum,
+        code_snippet: snippet,
+        confidence: 0.5
       })
     }
 
@@ -311,30 +375,31 @@ function checkOverallVerdict(
   if (lines.length === 0) return findings
 
   const malwareFindings = allFindings.filter(f => f.category === 'malware')
-  const criticalFindings = allFindings.filter(f => f.severity === 'critical')
+  // Only count high-confidence critical findings for the verdict
+  const highConfCritical = allFindings.filter(f => f.severity === 'critical' && (f.confidence ?? 0) >= 0.85)
   const hasStructure = allFindings.every(f => f.title !== 'Missing skill structure')
 
-  // Many critical + no skill structure = almost certainly malware
-  if (!hasStructure && criticalFindings.length >= 2) {
+  // Many high-confidence critical + no skill structure = almost certainly malware
+  if (!hasStructure && highConfCritical.length >= 2) {
     findings.push({
       scan_id: scanId,
       skill_id: skillId,
       category: 'malware',
       severity: 'critical',
       title: 'File appears to be malware, not a skill',
-      description: `This file lacks skill structure and contains ${criticalFindings.length} critical findings including ${malwareFindings.length} malware indicators. It is likely a malicious payload disguised as a skill file.`,
+      description: `This file lacks skill structure and contains ${highConfCritical.length} high-confidence critical findings including ${malwareFindings.length} malware indicators. It is likely a malicious payload disguised as a skill file.`,
       confidence: 0.9
     })
   }
   // High density of dangerous patterns even with some structure
-  else if (criticalFindings.length >= 3 && malwareFindings.length >= 2) {
+  else if (highConfCritical.length >= 3 && malwareFindings.length >= 2) {
     findings.push({
       scan_id: scanId,
       skill_id: skillId,
       category: 'malware',
       severity: 'critical',
       title: 'Skill file has malware characteristics',
-      description: `Despite having some markdown structure, this file contains ${criticalFindings.length} critical findings and ${malwareFindings.length} malware-category indicators. It may be a malicious skill.`,
+      description: `Despite having some markdown structure, this file contains ${highConfCritical.length} high-confidence critical findings and ${malwareFindings.length} malware-category indicators. It may be a malicious skill.`,
       confidence: 0.8
     })
   }
@@ -379,21 +444,24 @@ export function analyzeSkillContent(
     // Data exfiltration: URLs
     // Prose/markdown links are not executable — only flag URLs in code blocks
     // or lines with an executable context (curl, wget, fetch, etc.)
+    // Skip well-known safe domains (docs, package registries, official APIs)
     const urlRegex = /https?:\/\/[^\s)>"'`\]]+/g
+    const safeDomains = /^https?:\/\/(github\.com|api\.github\.com|gitlab\.com|npmjs\.com|registry\.npmjs\.org|pypi\.org|crates\.io|docs\.|stackoverflow\.com|developer\.mozilla\.org|wiki\.|example\.com|localhost|127\.0\.0\.1)/i
     const hasExecContext = /(curl|wget|fetch\(|axios\.|requests\.|http\.get|\.download|invoke-webrequest)/i.test(line)
     let match
-    if (inCode || hasExecContext) {
+    if (inCode && hasExecContext) {
       while ((match = urlRegex.exec(line)) !== null) {
+        if (safeDomains.test(match[0])) continue
         findings.push({
           scan_id: scanId,
           skill_id: skillId,
           category: 'data_exfiltration',
-          severity: inCode && hasExecContext ? 'high' : 'medium',
+          severity: 'medium',
           title: 'URL in executable context',
           description: `URL detected in ${inCode ? 'code block' : 'command context'}: ${match[0]}`,
           line_number: lineNum,
           code_snippet: snippet,
-          confidence: inCode ? 0.85 : 0.7
+          confidence: 0.7
         })
       }
     }
@@ -414,17 +482,22 @@ export function analyzeSkillContent(
     }
 
     // Data exfiltration: environment variable access — only in code blocks
-    if (inCode && /(?:process\.env|os\.getenv|getenv\(|os\.environ|\$[A-Z_]{2,})/i.test(line)) {
+    // Only flag as high if combined with network exfiltration on the same line;
+    // otherwise it's likely normal app configuration
+    if (inCode && /(?:process\.env|os\.getenv|getenv\(|os\.environ)/i.test(line)) {
+      const envWithNetwork = /(fetch|curl|wget|axios|requests\.|http\.get)/i.test(line)
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
         category: 'data_exfiltration',
-        severity: 'high',
+        severity: envWithNetwork ? 'high' : 'low',
         title: 'Environment variable access',
-        description: 'Skill accesses environment variables which may contain sensitive information.',
+        description: envWithNetwork
+          ? 'Skill reads environment variables and sends them over the network — potential data exfiltration.'
+          : 'Skill accesses environment variables, likely for configuration.',
         line_number: lineNum,
         code_snippet: snippet,
-        confidence: 0.8
+        confidence: envWithNetwork ? 0.85 : 0.5
       })
     }
 
@@ -474,17 +547,18 @@ export function analyzeSkillContent(
     }
 
     // Privilege escalation: permission modifications — only in code blocks
+    // chmod/chown are routine in devops; only setuid is truly dangerous (caught above)
     if (inCode && /(chmod\s+|chown\s+)/i.test(line) && !/chmod\s+u?\+s/i.test(line)) {
       findings.push({
         scan_id: scanId,
         skill_id: skillId,
         category: 'privilege_escalation',
-        severity: 'high',
+        severity: 'medium',
         title: 'Permission modification',
-        description: 'The skill modifies file permissions which could be used for privilege escalation.',
+        description: 'The skill modifies file permissions. This is common in deployment scripts but worth noting.',
         line_number: lineNum,
         code_snippet: snippet,
-        confidence: 0.9
+        confidence: 0.6
       })
     }
 

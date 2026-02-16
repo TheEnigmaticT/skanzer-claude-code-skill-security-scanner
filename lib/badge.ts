@@ -10,12 +10,16 @@ export interface BadgeData {
   scanDate: string
 }
 
-export function computeRiskLevel(findings: Pick<Finding, 'severity' | 'category'>[]): RiskLevel {
+export function computeRiskLevel(findings: Pick<Finding, 'severity' | 'category' | 'confidence'>[]): RiskLevel {
   if (findings.length === 0) return 'passed'
 
-  const hasCritical = findings.some(f => f.severity === 'critical')
-  const hasMalware = findings.some(f => f.category === 'malware')
-  if (hasCritical || hasMalware) return 'high_risk'
+  // Only escalate to high_risk for high-confidence critical/malware findings,
+  // or when there are multiple critical findings (even lower confidence)
+  const highConfCritical = findings.filter(f => f.severity === 'critical' && (f.confidence ?? 0) >= 0.85)
+  const allCritical = findings.filter(f => f.severity === 'critical')
+  const highConfMalware = findings.filter(f => f.category === 'malware' && (f.confidence ?? 0) >= 0.8)
+
+  if (highConfCritical.length > 0 || allCritical.length >= 2 || highConfMalware.length > 0) return 'high_risk'
 
   const hasMediumOrHigh = findings.some(f => f.severity === 'medium' || f.severity === 'high')
   if (hasMediumOrHigh) return 'caution'
@@ -32,7 +36,7 @@ const RISK_CONFIG: Record<RiskLevel, { text: string; color: string; colorLight: 
 
 export function buildBadgeData(
   repoLabel: string,
-  findings: Pick<Finding, 'severity' | 'category'>[],
+  findings: Pick<Finding, 'severity' | 'category' | 'confidence'>[],
   scanDate: string
 ): BadgeData {
   const riskLevel = computeRiskLevel(findings)
