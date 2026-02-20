@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import AppNav from '@/app/components/app-nav'
 
 export default function UploadSkillFilePage() {
@@ -35,51 +34,25 @@ export default function UploadSkillFilePage() {
     setError(null)
 
     try {
-      const supabase = createClient()
-
-      // Get current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError || !session) {
-        setError('You must be logged in to upload a skill')
-        setUploading(false)
-        return
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('name', name.trim())
+      if (description.trim()) {
+        formData.append('description', description.trim())
       }
 
-      // Read file content
-      const fileContent = await file.text()
+      const response = await fetch('/api/scan/file', {
+        method: 'POST',
+        body: formData,
+      })
 
-      // Insert skill
-      const { data: skill, error: skillError } = await supabase
-        .from('skills')
-        .insert({
-          user_id: session.user.id,
-          name: name.trim(),
-          description: description.trim() || null,
-          content: fileContent,
-          file_path: file.name,
-        })
-        .select()
-        .single()
+      const result = await response.json()
 
-      if (skillError) {
-        throw new Error(skillError.message)
+      if (!response.ok) {
+        throw new Error(result.error || 'An error occurred during upload')
       }
 
-      // Insert scan
-      const { data: scan, error: scanError } = await supabase
-        .from('scans')
-        .insert({
-          skill_id: skill.id,
-          status: 'pending',
-        })
-        .select()
-        .single()
-
-      if (scanError) {
-        throw new Error(scanError.message)
-      }
-
-      setScanId(scan.id)
+      setScanId(result.id)
     } catch (err: any) {
       setError(err.message || 'An error occurred during upload')
     } finally {
