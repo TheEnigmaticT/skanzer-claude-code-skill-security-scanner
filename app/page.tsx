@@ -6,16 +6,43 @@ export const revalidate = 60;
 export default async function Home() {
   const admin = createServiceClient();
 
-  const [{ count: skillCount }, { count: suspiciousCount }] = await Promise.all([
-    admin.from("skills").select("*", { count: "exact", head: true }),
-    admin
-      .from("findings")
-      .select("skill_id", { count: "exact", head: true })
-      .in("severity", ["high", "critical"]),
-  ]);
+  // Paginate to fetch all scans with findings (same logic as dashboard)
+  const PAGE_SIZE = 1000;
+  type ScanRow = {
+    skill_id: string;
+    status: string;
+    started_at: string;
+    findings: Array<{ id: string }>;
+  };
+  const allScans: ScanRow[] = [];
+  let from = 0;
+  let batch: ScanRow[];
+  do {
+    const { data } = await admin
+      .from("scans")
+      .select("skill_id, status, started_at, findings:findings(id)")
+      .order("started_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    batch = (data as unknown as ScanRow[]) || [];
+    allScans.push(...batch);
+    from += PAGE_SIZE;
+  } while (batch.length === PAGE_SIZE);
 
-  const scanned = skillCount ?? 0;
-  const suspicious = suspiciousCount ?? 0;
+  // Unique skills that have been scanned
+  const scanned = new Set(allScans.map((s) => s.skill_id)).size;
+
+  // For each skill, find latest completed scan
+  const latestBySkill: Record<string, ScanRow> = {};
+  for (const scan of allScans) {
+    if (scan.status !== "completed") continue;
+    if (!latestBySkill[scan.skill_id]) latestBySkill[scan.skill_id] = scan;
+  }
+
+  // Count skills whose latest completed scan has findings (matches dashboard "Flagged")
+  let suspicious = 0;
+  for (const scan of Object.values(latestBySkill)) {
+    if ((scan.findings || []).length > 0) suspicious++;
+  }
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text">
       {/* Nav */}
@@ -69,7 +96,7 @@ export default async function Home() {
             </div>
             <div>
               <div className="font-mono text-4xl sm:text-5xl font-bold text-brand-accent">{suspicious}</div>
-              <div className="font-mono text-xs text-brand-muted mt-1">suspicious findings</div>
+              <div className="font-mono text-xs text-brand-muted mt-1">skills flagged</div>
             </div>
           </div>
         </section>
