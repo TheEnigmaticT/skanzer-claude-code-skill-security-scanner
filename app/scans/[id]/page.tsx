@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { ScanWithDetails, SeverityLevel, FindingCategory } from '@/lib/types'
+import ScanDisclaimer from '@/app/components/scan-disclaimer'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -69,6 +70,7 @@ export default async function ScanDetailPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-brand-bg">
+      <ScanDisclaimer />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">

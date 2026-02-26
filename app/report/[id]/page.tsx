@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { ScanWithDetails, SeverityLevel, FindingCategory } from '@/lib/types'
 import { computeRiskLevel, type RiskLevel } from '@/lib/badge'
+import ScanDisclaimer from '@/app/components/scan-disclaimer'
 import type { Metadata } from 'next'
 
 interface PageProps {
@@ -95,6 +96,7 @@ export default async function PublicReportPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-brand-bg">
+      <ScanDisclaimer />
       {/* Header */}
       <header className="border-b border-brand-border">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">

@@ -50,19 +50,36 @@ export default function DashboardPage() {
       try {
         const supabase = createClient()
 
-        // Single query: get all scans with their skill name and findings
-        const { data: scans, error: scansError } = await supabase
-          .from('scans')
-          .select(`
-            id, skill_id, status, started_at,
-            skill:skills(id, name),
-            findings:findings(id, scan_id, skill_id, title, severity, category, description, created_at)
-          `)
-          .order('started_at', { ascending: false })
+        // Paginate to fetch ALL scans (Supabase defaults to 1000 row limit)
+        const PAGE_SIZE = 1000
+        type ScanRow = {
+          id: string
+          skill_id: string
+          status: string
+          started_at: string
+          skill: { id: string; name: string } | null
+          findings: Array<{ id: string; scan_id: string; skill_id: string; title: string; severity: string; category: string; description: string; created_at: string }>
+        }
+        const allScans: ScanRow[] = []
+        let from = 0
+        let batch: ScanRow[] = []
+        do {
+          const { data, error: batchError } = await supabase
+            .from('scans')
+            .select(`
+              id, skill_id, status, started_at,
+              skill:skills(id, name),
+              findings:findings(id, scan_id, skill_id, title, severity, category, description, created_at)
+            `)
+            .order('started_at', { ascending: false })
+            .range(from, from + PAGE_SIZE - 1)
 
-        if (scansError) throw new Error(scansError.message)
+          if (batchError) throw new Error(batchError.message)
+          batch = (data as unknown as ScanRow[]) || []
+          allScans.push(...batch)
+          from += PAGE_SIZE
+        } while (batch.length === PAGE_SIZE)
 
-        const allScans = scans || []
         const totalScans = allScans.length
 
         // Unique skills
@@ -100,6 +117,8 @@ export default function DashboardPage() {
         const allFindings = allScans.flatMap(scan =>
           (scan.findings || []).map(f => ({
             ...f,
+            severity: f.severity as SeverityLevel,
+            category: f.category as FindingCategory,
             skillName: (scan.skill as any)?.name || 'Unknown'
           }))
         )

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { analyzeSkillContent } from '@/lib/analyze'
+import { analyzeSkillContent, extractSkillName } from '@/lib/analyze'
+import { checkSkillCreationRate, rateLimitResponse } from '@/lib/rate-limit'
+
+const UPLOAD_RATE_LIMIT = 1000 // skills per hour via file upload
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +17,12 @@ export async function POST(request: NextRequest) {
         { error: 'Authentication required' },
         { status: 401 }
       )
+    }
+
+    // Rate limit: 1000 file upload scans per hour
+    const rateCheck = await checkSkillCreationRate(user.id, UPLOAD_RATE_LIMIT, null)
+    if (!rateCheck.allowed) {
+      return NextResponse.json(rateLimitResponse(rateCheck), { status: 429 })
     }
 
     // Parse form data
@@ -46,12 +55,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Use the name from content frontmatter/heading if available, otherwise the user-provided name
+    const extractedName = extractSkillName(content)
+    const skillName = extractedName || name.trim()
+
     // Create skill record
     const { data: skill, error: skillError } = await supabase
       .from('skills')
       .insert({
         user_id: user.id,
-        name: name.trim(),
+        name: skillName,
         description: description?.trim() || null,
         content,
         file_path: null // We're storing content directly, not in storage

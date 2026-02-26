@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getFilesContent, getRepoDefaultBranch } from '@/lib/github'
-import { analyzeSkillContent } from '@/lib/analyze'
+import { analyzeSkillContent, extractSkillName } from '@/lib/analyze'
+import { checkSkillCreationRate, rateLimitResponse } from '@/lib/rate-limit'
 import type { ScanWithDetails } from '@/lib/types'
 
 export const maxDuration = 60
+
+const GITHUB_RATE_LIMIT = 500 // skills per hour via GitHub
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +44,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Rate limit: 500 GitHub skill scans per hour
+    const rateCheck = await checkSkillCreationRate(user.id, GITHUB_RATE_LIMIT, 'github:%')
+    if (!rateCheck.allowed) {
+      return NextResponse.json(rateLimitResponse(rateCheck), { status: 429 })
+    }
+
+    // Check if this batch would exceed the limit
+    if (rateCheck.current + files.length > GITHUB_RATE_LIMIT) {
+      return NextResponse.json({
+        error: 'Rate limit exceeded',
+        message: `This batch of ${files.length} files would exceed your hourly limit. You have ${rateCheck.remaining} scans remaining this hour.`,
+        limit: GITHUB_RATE_LIMIT,
+        current: rateCheck.current,
+        remaining: rateCheck.remaining,
+      }, { status: 429 })
+    }
+
     // Always resolve branch so raw.githubusercontent.com fetching works
     const resolvedBranch = branch || await getRepoDefaultBranch(owner, repo)
 
@@ -52,7 +72,9 @@ export async function POST(request: NextRequest) {
 
     for (const filePath of files) {
       const result = fileContents.get(filePath)!
-      const name = filePath.split('/').pop()?.replace(/\.md$/i, '') || filePath
+      const fileBaseName = filePath.split('/').pop()?.replace(/\.md$/i, '') || filePath
+      // Try to extract a meaningful name from the skill file content (frontmatter or heading)
+      const name = (result.content ? extractSkillName(result.content) : null) || fileBaseName
 
       // Create skill record
       const { data: skill, error: skillError } = await admin

@@ -3,6 +3,32 @@ import type { Finding, FindingCategory, SeverityLevel } from '@/lib/types'
 type NewFinding = Omit<Finding, 'id' | 'created_at'>
 
 /**
+ * Extract a meaningful skill name from skill file content.
+ * Checks YAML frontmatter `name:` field first, then falls back to the first
+ * markdown heading (# ...).  Returns null if nothing useful is found.
+ */
+export function extractSkillName(content: string): string | null {
+  // Try YAML frontmatter  name: field
+  const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/)
+  if (fmMatch) {
+    const nameMatch = fmMatch[1].match(/^name:\s*(.+)/m)
+    if (nameMatch) {
+      const name = nameMatch[1].trim().replace(/^["']|["']$/g, '')
+      if (name.length > 0) return name
+    }
+  }
+
+  // Fall back to first markdown heading
+  const headingMatch = content.match(/^#{1,6}\s+(.+)/m)
+  if (headingMatch) {
+    const name = headingMatch[1].trim()
+    if (name.length > 0) return name
+  }
+
+  return null
+}
+
+/**
  * Check whether this file looks like a legitimate Claude Code skill
  * (markdown with frontmatter / headings / prose) vs raw code / commands.
  */

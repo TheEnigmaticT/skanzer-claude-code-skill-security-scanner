@@ -21,19 +21,40 @@ export default function HistoryPage() {
   useEffect(() => {
     async function fetchScans() {
       const supabase = createClient()
-      const { data, error } = await supabase
-        .from('scans')
-        .select(`
-          *,
-          skill:skills(*),
-          findings:findings(*)
-        `)
-        .order('started_at', { ascending: false })
 
-      if (error) {
-        setError(error.message)
+      // Paginate to fetch ALL scans (Supabase defaults to 1000 row limit)
+      const PAGE_SIZE = 1000
+      const allScans: ScanWithDetails[] = []
+      let from = 0
+      let fetchError: string | null = null
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error } = await supabase
+          .from('scans')
+          .select(`
+            *,
+            skill:skills(*),
+            findings:findings(*)
+          `)
+          .order('started_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1)
+
+        if (error) {
+          fetchError = error.message
+          break
+        }
+
+        const batch = (data as unknown as ScanWithDetails[]) || []
+        allScans.push(...batch)
+        if (batch.length < PAGE_SIZE) break
+        from += PAGE_SIZE
+      }
+
+      if (fetchError) {
+        setError(fetchError)
       } else {
-        setScans(data || [])
+        setScans(allScans)
       }
       setLoading(false)
     }

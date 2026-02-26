@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { analyzeSkillContent } from '@/lib/analyze'
+import { checkScanCreationRate, rateLimitResponse } from '@/lib/rate-limit'
 import type { Scan } from '@/lib/types'
+
+const DIRECTORY_RATE_LIMIT = 1000 // scans per hour via directory re-scan
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -37,6 +40,22 @@ export async function POST(request: NextRequest) {
 
   // Deduplicate skill IDs
   const uniqueSkillIds = [...new Set(skillIds)]
+
+  // Rate limit: 1000 directory re-scans per hour
+  const rateCheck = await checkScanCreationRate(user.id, DIRECTORY_RATE_LIMIT)
+  if (!rateCheck.allowed) {
+    return NextResponse.json(rateLimitResponse(rateCheck), { status: 429 })
+  }
+
+  if (rateCheck.current + uniqueSkillIds.length > DIRECTORY_RATE_LIMIT) {
+    return NextResponse.json({
+      error: 'Rate limit exceeded',
+      message: `This batch of ${uniqueSkillIds.length} skills would exceed your hourly limit. You have ${rateCheck.remaining} scans remaining this hour.`,
+      limit: DIRECTORY_RATE_LIMIT,
+      current: rateCheck.current,
+      remaining: rateCheck.remaining,
+    }, { status: 429 })
+  }
 
   // Fetch all requested skills belonging to the user
   const { data: skills, error: skillsError } = await supabase
