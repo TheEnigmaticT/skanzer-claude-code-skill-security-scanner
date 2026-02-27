@@ -32,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <script defer src="https://umami-analytics-sigma-pink.vercel.app/script.js" data-website-id="98ef0087-9dae-4381-ab6b-372c8f84f2b2"></script>
+        <script defer src="https://umami-analytics-theenigmaticts-projects.vercel.app/script.js" data-website-id="6aabecc9-90ed-4959-a309-af81d1239159"></script>
       </head>
       <body className={`${spaceMono.variable} ${dmSans.variable} antialiased`}>
         {children}
