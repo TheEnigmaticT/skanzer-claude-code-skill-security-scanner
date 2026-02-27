@@ -31,6 +31,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script defer src="https://umami-analytics-sigma-pink.vercel.app/script.js" data-website-id="98ef0087-9dae-4381-ab6b-372c8f84f2b2"></script>
+      </head>
       <body className={`${spaceMono.variable} ${dmSans.variable} antialiased`}>
         {children}
       </body>
