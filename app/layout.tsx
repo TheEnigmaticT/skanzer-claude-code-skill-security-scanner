@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Mono, DM_Sans } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const spaceMono = Space_Mono({
@@ -31,11 +32,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <script defer src="https://umami-analytics-theenigmaticts-projects.vercel.app/script.js" data-website-id="6aabecc9-90ed-4959-a309-af81d1239159"></script>
-      </head>
       <body className={`${spaceMono.variable} ${dmSans.variable} antialiased`}>
         {children}
+        <Script
+          src="https://umami-analytics-theenigmaticts-projects.vercel.app/script.js"
+          data-website-id="6aabecc9-90ed-4959-a309-af81d1239159"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
