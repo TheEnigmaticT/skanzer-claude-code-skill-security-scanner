@@ -35,8 +35,8 @@ export default function RootLayout({
       <body className={`${spaceMono.variable} ${dmSans.variable} antialiased`}>
         {children}
         <Script
-          src="https://umami-analytics-theenigmaticts-projects.vercel.app/script.js"
-          data-website-id="6aabecc9-90ed-4959-a309-af81d1239159"
+          src="https://umami-analytics-sigma-pink.vercel.app/script.js"
+          data-website-id="0a41e2cf-396b-4a9c-b554-c44b8b083661"
           strategy="afterInteractive"
         />
       </body>
